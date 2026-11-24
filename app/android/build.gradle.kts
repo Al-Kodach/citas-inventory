@@ -5,6 +5,11 @@ plugins {
     alias(libs.plugins.composeCompiler)
 }
 
+val appVersion = project.findProperty("APP_VERSION")?.toString()
+    ?: System.getenv("APP_VERSION")
+    ?: System.getenv("GITHUB_REF_NAME")?.removePrefix("v")?.takeIf { it.isNotBlank() }
+    ?: "1.0.0"
+
 android {
     namespace = "com.citacomsys.inventory"
     compileSdk = 37
@@ -14,7 +19,7 @@ android {
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = 37
         versionCode = 1
-        versionName = "1.0.0"
+        versionName = appVersion
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         multiDexEnabled = true
     }

@@ -40,6 +40,11 @@ dependencies {
 }
 
 
+val appVersion = project.findProperty("APP_VERSION")?.toString()
+    ?: System.getenv("APP_VERSION")
+    ?: System.getenv("GITHUB_REF_NAME")?.removePrefix("v")?.takeIf { it.isNotBlank() && it.matches(Regex("^[0-9]+\\.[0-9]+\\.[0-9]+.*$")) }
+    ?: "1.0.0"
+
 compose.desktop {
     application {
         mainClass = "com.citacomsys.inventory.MainKt"
@@ -47,7 +52,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Deb)
             packageName = "com.citacomsys.inventory.desktop"
-            packageVersion = "1.0.0"
+            packageVersion = appVersion
         }
     }
 }

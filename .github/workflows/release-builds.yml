@@ -1,4 +1,4 @@
-name: Citas SaaS Release Build & Publish (Android, Windows, Linux)
+name: Citas SaaS Release Build & Publish (Android, Windows EXE/MSI, Linux DEB)
 
 on:
   push:
@@ -59,7 +59,7 @@ jobs:
           path: app/desktop/build/compose/binaries/main/deb/*.deb
 
   build-windows:
-    name: Build Windows Installer (.msi)
+    name: Build Windows Installers (.msi & .exe)
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
@@ -72,14 +72,16 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
-      - name: Build Windows Native Desktop Package (.msi)
-        run: .\gradlew.bat :app:desktop:packageMsi
+      - name: Build Windows Packages (.msi & .exe)
+        run: .\gradlew.bat :app:desktop:packageMsi :app:desktop:packageExe
 
-      - name: Upload Windows Desktop Installer
+      - name: Upload Windows Desktop Installers
         uses: actions/upload-artifact@v4
         with:
-          name: windows-desktop-msi
-          path: app/desktop/build/compose/binaries/main/msi/*.msi
+          name: windows-desktop-installers
+          path: |
+            app/desktop/build/compose/binaries/main/msi/*.msi
+            app/desktop/build/compose/binaries/main/exe/*.exe
 
   publish-release-assets:
     name: Attach Binaries to GitHub Release
@@ -102,7 +104,8 @@ jobs:
         with:
           files: |
             artifacts/**/*.apk
-            artifacts/**/*.deb
             artifacts/**/*.msi
+            artifacts/**/*.exe
+            artifacts/**/*.deb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

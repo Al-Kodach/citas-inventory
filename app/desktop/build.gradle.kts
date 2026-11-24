@@ -45,7 +45,7 @@ compose.desktop {
         mainClass = "com.citacomsys.inventory.MainKt"
 
         nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
+            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Deb)
             packageName = "com.citacomsys.inventory.desktop"
             packageVersion = "1.0.0"
         }

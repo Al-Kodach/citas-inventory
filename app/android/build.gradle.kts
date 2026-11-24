@@ -33,23 +33,17 @@ android {
                 this.keyPassword = keyPassword
             } else {
                 val debugConfig = getByName("debug")
-                val fallbackFile = debugConfig.storeFile
-                if (fallbackFile != null && fallbackFile.exists()) {
-                    storeFile = fallbackFile
-                    storePassword = debugConfig.storePassword
-                    this.keyAlias = debugConfig.keyAlias
-                    this.keyPassword = debugConfig.keyPassword
-                }
+                storeFile = debugConfig.storeFile
+                storePassword = debugConfig.storePassword
+                this.keyAlias = debugConfig.keyAlias
+                this.keyPassword = debugConfig.keyPassword
             }
         }
     }
 
     buildTypes {
         release {
-            val releaseConfig = signingConfigs.getByName("release")
-            if (releaseConfig.storeFile != null && releaseConfig.storeFile?.exists() == true) {
-                signingConfig = releaseConfig
-            }
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

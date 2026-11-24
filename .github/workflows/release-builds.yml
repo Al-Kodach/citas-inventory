@@ -26,18 +26,21 @@ jobs:
 
       - name: Setup Android Keystore for CI Build
         run: |
+          mkdir -p ~/.android
           if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
             echo "Decoding production keystore from secrets..."
-            mkdir -p ~/.android
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ~/.android/release.keystore
             echo "KEYSTORE_FILE=/home/runner/.android/release.keystore" >> $GITHUB_ENV
             echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
             echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
             echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
           else
-            echo "Generating CI build keystore..."
-            mkdir -p ~/.android
-            keytool -genkey -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            echo "Generating signing keystore for CI release..."
+            keytool -genkey -v -keystore ~/.android/release.keystore -storepass citas2026 -alias citasapp -keypass citas2026 -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Citas SaaS,O=Citacom Systems,C=US"
+            echo "KEYSTORE_FILE=/home/runner/.android/release.keystore" >> $GITHUB_ENV
+            echo "KEYSTORE_PASSWORD=citas2026" >> $GITHUB_ENV
+            echo "KEY_ALIAS=citasapp" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=citas2026" >> $GITHUB_ENV
           fi
 
       - name: Build Android Release APK

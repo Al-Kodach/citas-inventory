@@ -1,0 +1,135 @@
+-- This is a generic table for queueing ANY type of API request that fails offline.
+import kotlin.Boolean;
+
+CREATE TABLE PendingRequestEntity (
+    id TEXT NOT NULL PRIMARY KEY,            -- The unique Event Action ID
+    payload TEXT,                            -- Optional: Poly JSON Command (RestockRequest, AdjustRequest, etc.)
+    workspace_id TEXT NOT NULL,                       -- Explicit Workspace Ownership
+    branch_id TEXT NOT NULL,                          -- Explicit Branch Ownership
+    endpoint TEXT NOT NULL,                  -- HTTP Path Target
+    method TEXT AS com.citacomsys.core.database.dao.RequestMethod NOT NULL,
+    entityType TEXT AS com.citacomsys.types.EntityType NOT NULL,
+    entity_id TEXT NOT NULL,
+    dependant_id TEXT DEFAULT NULL,
+
+    eventAction TEXT NOT NULL,               -- 'RESTOCK', 'ADJUSTMENT', 'SALE', 'DELETE'
+
+    isSyncing INTEGER AS Boolean NOT NULL DEFAULT 0,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    actor_id TEXT NOT NULL,
+    actor_name TEXT NOT NULL,
+    routing_chain_json TEXT DEFAULT NULL,
+    createdAt TEXT NOT NULL,
+    lastFailureReason TEXT DEFAULT NULL,
+    lastFailureTimestamp TEXT AS kotlin.time.Instant DEFAULT NULL,
+    canRetry INTEGER AS Boolean NOT NULL DEFAULT 1
+);
+
+-- Query to get a mix of any pending requests
+getPendingRequests:
+SELECT * FROM PendingRequestEntity
+WHERE isSyncing = 0 AND canRetry = 1
+ORDER BY createdAt ASC LIMIT :limit;
+
+-- Observe requests for a SPECIFIC type
+observeByType:
+SELECT * FROM PendingRequestEntity WHERE entityType = ?;
+
+-- Mark specific requests as "in-progress"
+markAsSyncing:
+UPDATE PendingRequestEntity SET isSyncing = 1 WHERE id IN ?;
+
+-- Unmark specific requests as "not-in-progress" (on failure)
+unmarkAsSyncing:
+UPDATE PendingRequestEntity SET
+    isSyncing = 0,
+    lastFailureReason = :reason,
+    attempts = attempts + 1,
+    lastFailureTimestamp = :timestamp
+WHERE id = :id;
+
+-- Delete a request after successful sync
+deleteById:
+DELETE FROM PendingRequestEntity WHERE id = ?;
+
+-- Insert a new request into the queue (Full)
+insert:
+INSERT INTO PendingRequestEntity
+VALUES ?;
+
+-- Simplified insert for standard offline queueing
+insertRequest:
+INSERT INTO PendingRequestEntity (
+    id, payload, workspace_id, branch_id, endpoint, method, entityType, entity_id, dependant_id,
+    eventAction, actor_id, actor_name, createdAt,
+    routing_chain_json
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- Observe all (useful for UI or debugging)
+observeAll:
+SELECT * FROM PendingRequestEntity;
+
+getByType:
+SELECT * FROM PendingRequestEntity WHERE entityType = :type;
+
+getById:
+SELECT * FROM PendingRequestEntity WHERE id = :id;
+
+count:
+SELECT COUNT(*) FROM PendingRequestEntity;
+
+moveToDeadLetterLog:
+UPDATE PendingRequestEntity SET
+    isSyncing = 0,
+    lastFailureReason = :reason,
+    lastFailureTimestamp = :timestamp,
+    canRetry = 0
+WHERE id = :id;
+
+-- Updated Cascading Search: Finds any pending command where its dependant_id list
+-- contains the failed parent entity_id.
+getDependentRequests:
+SELECT id FROM PendingRequestEntity
+WHERE isSyncing = 0
+  AND dependant_id IS NOT NULL
+  AND instr(dependant_id, :failedParentEntityId) > 0;
+
+-- Simple lookup check to verify if a specific batch ID is currently awaiting its initial cloud push
+findPendingRestockByEntityId:
+SELECT entity_id
+FROM PendingRequestEntity
+WHERE entity_id = :batchId
+  AND eventAction = 'RESTOCK'
+  LIMIT 1;
+
+-- Bulk move dependent poison requests out of the active queue
+moveBatchToDeadLetterLog:
+UPDATE PendingRequestEntity
+SET isSyncing = 0,
+    attempts = attempts + 1,
+    lastFailureReason = :reason,
+    lastFailureTimestamp = :timestamp,
+    canRetry = 0
+WHERE id IN :ids;
+
+markAsPending:
+UPDATE PendingRequestEntity SET isSyncing = 0 WHERE id IN :ids;
+
+resetStaleSyncing:
+UPDATE PendingRequestEntity SET isSyncing = 0 WHERE isSyncing = 1;
+
+getPendingRequestsExcludingWorkspaces:
+SELECT *
+FROM PendingRequestEntity
+WHERE isSyncing = 0 AND canRetry = 1
+  AND workspace_id NOT IN :excludedWorkspaces
+ORDER BY createdAt ASC LIMIT :limit;
+
+getPendingRequestsForWorkspace:
+SELECT * FROM PendingRequestEntity
+WHERE isSyncing = 0 AND canRetry = 1 AND workspace_id = :workspaceId
+ORDER BY createdAt ASC LIMIT :limit;
+
+
+
+

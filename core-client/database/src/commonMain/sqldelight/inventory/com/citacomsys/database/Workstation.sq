@@ -1,0 +1,25 @@
+import kotlin.time.Instant;
+
+CREATE TABLE WorkstationBindingEntity (
+    hardware_id TEXT NOT NULL PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    public_key TEXT NOT NULL, -- Base64 Public Key
+    fingerprint TEXT,          -- Hardware Fingerprint
+    name TEXT,
+    status TEXT NOT NULL,      -- 'ACTIVE', 'REVOKED', 'LOCKED'
+    last_seen_at TEXT AS Instant NOT NULL,
+    created_at TEXT AS Instant NOT NULL
+);
+
+insertOrUpdate:
+INSERT OR REPLACE INTO WorkstationBindingEntity
+VALUES ?;
+
+selectById:
+SELECT * FROM WorkstationBindingEntity WHERE hardware_id = ?;
+
+selectAll:
+SELECT * FROM WorkstationBindingEntity;
+
+deleteById:
+DELETE FROM WorkstationBindingEntity WHERE hardware_id = ?;

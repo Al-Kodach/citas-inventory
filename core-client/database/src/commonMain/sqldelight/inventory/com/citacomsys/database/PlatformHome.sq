@@ -1,0 +1,64 @@
+import kotlin.time.Instant;
+
+CREATE TABLE platformFeatureEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    icon TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    order_rank INTEGER NOT NULL
+);
+
+CREATE TABLE productPackageEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    price_amount TEXT NOT NULL,
+    price_currency TEXT NOT NULL,
+    billing_cycle TEXT NOT NULL,
+    limits_json TEXT NOT NULL, -- Serialized PackageLimits
+    sms_quota_json TEXT NOT NULL, -- Serialized PackageSmsQuota
+    modules_json TEXT NOT NULL, -- Serialized Set<ProductModule>
+    recommended INTEGER NOT NULL DEFAULT 0,
+    is_public INTEGER NOT NULL DEFAULT 1,
+    updated_at INTEGER AS Instant NOT NULL
+);
+
+CREATE TABLE platformDemoEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    title TEXT NOT NULL,
+    video_url TEXT,
+    image_url TEXT,
+    order_rank INTEGER NOT NULL
+);
+
+-- Features
+insertFeature:
+INSERT OR REPLACE INTO platformFeatureEntity(id, icon, title, description, order_rank)
+VALUES (?, ?, ?, ?, ?);
+
+selectAllFeatures:
+SELECT * FROM platformFeatureEntity ORDER BY order_rank ASC;
+
+clearFeatures:
+DELETE FROM platformFeatureEntity;
+
+-- Packages
+insertPackage:
+INSERT OR REPLACE INTO productPackageEntity(id, name, price_amount, price_currency, billing_cycle, limits_json, sms_quota_json, modules_json, recommended, is_public, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectAllPackages:
+SELECT * FROM productPackageEntity WHERE is_public = 1 ORDER BY recommended DESC, id ASC;
+
+clearPackages:
+DELETE FROM productPackageEntity;
+
+-- Demos
+insertDemo:
+INSERT OR REPLACE INTO platformDemoEntity(id, title, video_url, image_url, order_rank)
+VALUES (?, ?, ?, ?, ?);
+
+selectAllDemos:
+SELECT * FROM platformDemoEntity ORDER BY order_rank ASC;
+
+clearDemos:
+DELETE FROM platformDemoEntity;

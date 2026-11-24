@@ -1,0 +1,108 @@
+CREATE VIEW ProductListItemView AS
+WITH live_batch_truth AS (
+    -- Compute absolute operational truth for EVERY individual batch line
+    SELECT
+        s.product_id,
+        s.workspace_id,
+        s.branch_id,
+        s.batch_id,
+        s.expiry_date,
+        s.selling_price_amount_minor,
+        s.selling_price_currency,
+        s.available_quantity,
+        CAST(
+            s.available_quantity + COALESCE(
+                (SELECT SUM(CASE WHEN m.type = 'OUT' THEN -m.quantity ELSE m.quantity END)
+                 FROM StockMovementEntity m
+                 WHERE m.batch_id = s.batch_id
+                   AND m.branch_id = s.branch_id
+                   AND m.is_accounted_for = 0),
+                0
+            )
+        AS INTEGER) AS live_batch_qty
+    FROM BatchSnapshotEntity s
+),
+stock_aggregates AS (
+    -- Roll up individual batch lines safely into product summaries per branch
+    SELECT
+        product_id,
+        workspace_id,
+        branch_id,
+        CAST(SUM(live_batch_qty) AS INTEGER) AS totalAvailable,
+        MIN(CASE WHEN live_batch_qty > 0 THEN expiry_date END) AS nextExpiry,
+
+        -- Guaranteed price match for the current closest active batch line
+        CAST(COALESCE(
+            (SELECT t.selling_price_amount_minor
+             FROM live_batch_truth t
+             WHERE t.product_id = l.product_id AND t.branch_id = l.branch_id AND t.live_batch_qty > 0
+             ORDER BY COALESCE(t.expiry_date, '9999-12-31') ASC LIMIT 1),
+            MAX(selling_price_amount_minor)
+        ) AS INTEGER) AS currentPriceAmount,
+
+        COALESCE(
+            (SELECT t.selling_price_currency
+             FROM live_batch_truth t
+             WHERE t.product_id = l.product_id AND t.branch_id = l.branch_id AND t.live_batch_qty > 0
+             ORDER BY COALESCE(t.expiry_date, '9999-12-31') ASC LIMIT 1),
+            MAX(selling_price_currency)
+        ) AS currentPriceCurrency
+
+    FROM live_batch_truth l
+    GROUP BY product_id, workspace_id, branch_id
+)
+SELECT
+    p.id AS id,
+    p.workspace_id AS workspaceId,
+    COALESCE(a.branch_id, '') AS branchId,
+    p.name AS name,
+    p.brand_name AS brandName,
+    p.unit_of_measure AS unitOfMeasure,
+    CAST(COALESCE(a.totalAvailable, p.total_available) AS INTEGER) AS totalAvailable,
+    COALESCE(a.currentPriceAmount, p.current_price_amount_minor) AS currentPriceAmount,
+    COALESCE(a.currentPriceCurrency, p.current_price_currency) AS currentPriceCurrency,
+    a.nextExpiry,
+    p.sku,
+    p.barcode,
+    p.product_type AS productType,
+    p.reorder_level AS reorderLevel
+FROM ProductItemEntity p
+LEFT JOIN stock_aggregates a ON p.id = a.product_id
+WHERE p.is_active = 1;
+
+-- ==========================================
+-- READS
+-- ==========================================
+
+findById:
+SELECT * FROM ProductListItemView
+WHERE id = :productId_
+LIMIT 1;
+
+selectAll:
+SELECT * FROM ProductListItemView
+WHERE workspaceId = :workspaceId_
+  AND (:branchId_ IS NULL OR branchId = :branchId_ OR branchId = '')
+ORDER BY name ASC;
+
+search:
+SELECT * FROM ProductListItemView
+WHERE workspaceId = :workspaceId_
+  AND (:branchId_ IS NULL OR branchId = :branchId_ OR branchId = '')
+  AND (name LIKE '%' || :query || '%' OR brandName LIKE '%' || :query || '%' OR sku LIKE '%' || :query || '%' OR barcode LIKE '%' || :query || '%')
+ORDER BY name ASC;
+
+query:
+SELECT * FROM ProductListItemView
+WHERE workspaceId = :workspaceId
+  AND (:branchId IS NULL OR branchId = :branchId OR branchId = '')
+  AND (
+      :query IS NULL OR :query = '' OR
+      name LIKE '%' || :query || '%' OR
+      brandName LIKE '%' || :query || '%' OR
+      sku LIKE '%' || :query || '%' OR
+      barcode LIKE '%' || :query || '%'
+  )
+ORDER BY name ASC
+LIMIT :limit
+OFFSET :offset;

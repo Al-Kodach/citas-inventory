@@ -1,0 +1,69 @@
+import kotlin.time.Instant;
+import kotlin.Boolean;
+
+-- ==============================================================================
+-- METADATA STORAGE (Full Product Context & Extension JSON)
+-- ==============================================================================
+CREATE TABLE ProductEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+
+    -- Base Identity
+    name TEXT NOT NULL,
+    brand_name TEXT NOT NULL,
+    sku TEXT UNIQUE,
+    barcode TEXT UNIQUE,
+    unit_of_measure TEXT NOT NULL DEFAULT 'Piece',
+    category TEXT,
+    description TEXT,
+    reorder_level INTEGER AS kotlin.Int NOT NULL DEFAULT 10,
+    product_type TEXT NOT NULL,
+
+    -- Dynamic Extensions (PharmacyProductExt, RetailProductExt, etc.)
+    extension_data_json TEXT NOT NULL,
+
+    -- Lifecycle & Sync
+    created_at TEXT AS Instant NOT NULL,
+    updated_at TEXT AS Instant NOT NULL,
+    is_active INTEGER AS Boolean NOT NULL DEFAULT 1,
+    actor_id TEXT NOT NULL
+);
+
+-- Indices
+CREATE INDEX idx_product_tenant ON ProductEntity(workspace_id);
+CREATE INDEX idx_product_barcode ON ProductEntity(barcode) WHERE is_active = 1;
+
+-- Writes
+insertOrReplace:
+INSERT OR REPLACE INTO ProductEntity
+VALUES ?;
+
+deleteById:
+DELETE FROM ProductEntity WHERE ProductEntity.id = ?;
+
+deleteAll:
+DELETE FROM ProductEntity;
+
+-- Reads
+selectById:
+SELECT * FROM ProductEntity WHERE id = ?;
+
+count:
+SELECT COUNT(*) FROM ProductEntity WHERE is_active = 1;
+
+softDeleteWithScramble:
+UPDATE ProductEntity SET
+    sku = CASE WHEN sku IS NOT NULL THEN sku || '_del_' || id ELSE NULL END,
+    barcode = CASE WHEN barcode IS NOT NULL THEN barcode || '_del_' || id ELSE NULL END,
+    is_active = 0,
+    updated_at = :updatedAt
+WHERE id = :id;
+
+updateProductExtensionData:
+UPDATE ProductEntity SET
+    extension_data_json = :extension_data_json,
+    updated_at = :updated_at
+WHERE id = :id;
+
+getProductMaxUpdateTimestampForWorkspace:
+SELECT MAX(updated_at) FROM ProductEntity WHERE workspace_id = ?;

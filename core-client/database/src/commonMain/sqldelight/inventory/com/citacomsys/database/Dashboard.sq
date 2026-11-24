@@ -1,0 +1,107 @@
+import kotlin.time.Instant;
+
+-- Queries --
+
+getDashboardSummary:
+SELECT
+    -- Total Revenue calculated directly from local sales records for a specific branch and workspace
+    (SELECT COALESCE(SUM(total_amount_minor), 0) FROM SaleEntity WHERE branch_id = :branchId AND workspace_id = :wsId) AS totalRevenueMinor,
+
+    -- Count of products that need attention in this branch and workspace
+    (SELECT COUNT(*) FROM ProductListItemView WHERE totalAvailable <= COALESCE(reorderLevel, 0) AND branchId = :branchId AND workspaceId = :wsId) AS lowStockCount,
+
+    -- Count of batches nearing expiry in this branch and workspace
+    (SELECT COUNT(*)
+     FROM BatchSnapshotEntity
+     WHERE branch_id = :branchId AND workspace_id = :wsId
+       AND expiry_date IS NOT NULL
+       AND (julianday(expiry_date) - julianday('now')) <= 30) AS expiryRiskCount,
+
+    -- Count of uncommitted/pending outbox requests for this branch
+    (SELECT COUNT(*) FROM PendingRequestEntity WHERE workspace_id = :wsId AND branch_id = :branchId) AS pendingOrdersCount,
+
+    -- Count of active inventory batch lines for this branch
+    (SELECT COUNT(*) FROM BatchSnapshotEntity WHERE workspace_id = :wsId AND branch_id = :branchId AND available_quantity > 0) AS activeInventoryCount;
+
+
+getDashboardActivityFeed:
+SELECT
+    m.id,
+    m.type,
+    m.quantity,
+    m.created_at,
+    COALESCE(p.name, 'Unknown Item') AS productName,
+    COALESCE(p.unitOfMeasure, 'Piece') AS unitOfMeasure,
+    m.batch_number AS batchNumber,
+    m.reference_type AS activityType,
+    COALESCE(u.name, 'System/User') AS actorName
+FROM StockMovementEntity m
+LEFT JOIN ProductListItemView p ON m.product_id = p.id
+LEFT JOIN AppUserEntity u ON m.actor_id = u.id
+WHERE m.branch_id = :branchId AND m.workspace_id = :wsId
+ORDER BY m.created_at DESC
+LIMIT 20;
+
+-- For business-wide overview (CEO Mode)
+getBusinessSummary:
+SELECT
+    (SELECT COALESCE(SUM(total_amount_minor), 0) FROM SaleEntity WHERE workspace_id = :wsId) AS totalRevenueMinor,
+    (SELECT COUNT(*) FROM ProductListItemView WHERE totalAvailable <= COALESCE(reorderLevel, 0) AND workspaceId = :wsId) AS lowStockCount,
+
+    (SELECT COUNT(*) FROM BatchSnapshotEntity bs
+        WHERE bs.expiry_date IS NOT NULL
+        AND (julianday(bs.expiry_date) - julianday('now')) <= 30
+        AND bs.workspace_id = :wsId
+    ) AS expiryRiskCount,
+
+    -- Count of uncommitted/pending outbox requests across business
+    (SELECT COUNT(*) FROM PendingRequestEntity WHERE workspace_id = :wsId) AS pendingOrdersCount,
+
+    -- Count of active inventory batch lines across business
+    (SELECT COUNT(*) FROM BatchSnapshotEntity WHERE workspace_id = :wsId AND available_quantity > 0) AS activeInventoryCount;
+
+getBusinessActivityFeed:
+SELECT
+    m.id,
+    m.type,
+    m.quantity,
+    m.created_at,
+    m.workspace_id,
+    COALESCE(p.name, 'Unknown Item') AS productName,
+    COALESCE(p.unitOfMeasure, 'Piece') AS unitOfMeasure,
+    m.batch_number AS batchNumber,
+    m.reference_type AS activityType,
+    COALESCE(u.name, 'System/User') AS actorName
+FROM StockMovementEntity m
+LEFT JOIN ProductListItemView p ON m.product_id = p.id
+LEFT JOIN AppUserEntity u ON m.actor_id = u.id
+WHERE m.workspace_id = :wsId
+ORDER BY m.created_at DESC
+LIMIT 50;
+
+-- Cloud Cache for aggregated metrics --
+CREATE TABLE DashboardSummaryCache (
+    id TEXT PRIMARY KEY, -- e.g. "BRANCH_{id}_DAILY" or "BUSINESS_WEEKLY"
+    workspace_id TEXT NOT NULL,
+    branch_id TEXT,      -- NULL for business-wide
+    total_revenue_minor INTEGER NOT NULL DEFAULT 0,
+    low_stock_count INTEGER NOT NULL DEFAULT 0,
+    expiry_risk_count INTEGER NOT NULL DEFAULT 0,
+    pending_orders_count INTEGER NOT NULL DEFAULT 0,
+    active_inventory_count INTEGER NOT NULL DEFAULT 0,
+    revenue_growth_percentage REAL NOT NULL DEFAULT 0.0,
+    stockout_risk_count INTEGER NOT NULL DEFAULT 0,
+    top_products_json TEXT, -- Serialized List<TopProductMetric>
+    revenue_trend_json TEXT, -- Serialized List<TrendPoint>
+    cached_at INTEGER AS Instant NOT NULL
+);
+
+insertSummaryCache:
+INSERT OR REPLACE INTO DashboardSummaryCache
+VALUES ?;
+
+getSummaryCache:
+SELECT * FROM DashboardSummaryCache WHERE id = ? AND workspace_id = :wsId;
+
+deleteSummaryCache:
+DELETE FROM DashboardSummaryCache WHERE id = ?;

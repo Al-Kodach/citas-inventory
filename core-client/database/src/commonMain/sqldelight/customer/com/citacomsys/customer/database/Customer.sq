@@ -1,0 +1,177 @@
+import kotlin.time.Instant;
+import kotlin.Boolean;
+
+-- Main offline table
+CREATE TABLE CustomerEntity (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    branch_id TEXT NOT NULL,
+    full_name TEXT NOT NULL,
+    phone TEXT UNIQUE,
+    email TEXT UNIQUE,
+    is_alerts_consented INTEGER AS Boolean NOT NULL DEFAULT 1,
+
+    credit_limit_amount INTEGER,
+    credit_limit_currency TEXT,
+    current_balance_amount INTEGER,
+    current_balance_currency TEXT,
+    extension_data_json TEXT,
+
+    is_syncing INTEGER AS Boolean NOT NULL DEFAULT 0,
+    deleted_at TEXT AS Instant,
+    created_at TEXT AS Instant NOT NULL,
+    updated_at TEXT AS Instant NOT NULL
+);
+
+CREATE TABLE CustomerSearchEntity(
+   customer_id TEXT PRIMARY KEY,
+   full_name TEXT NOT NULL,
+   workspace_id TEXT NOT NULL,
+   branch_id TEXT NOT NULL,
+   phone TEXT,
+   email TEXT,
+   timestamp TEXT AS Instant NOT NULL
+);
+
+CREATE INDEX idx_cust_name ON CustomerSearchEntity(full_name);
+CREATE INDEX idx_cust_phone ON CustomerSearchEntity(phone);
+CREATE INDEX idx_cust_email ON CustomerSearchEntity(email);
+CREATE INDEX idx_cust_ws_br ON CustomerSearchEntity(workspace_id, branch_id);
+
+CREATE TABLE CustomerLedgerEntity (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    amount_minor INTEGER NOT NULL,
+    currency TEXT NOT NULL,
+    type TEXT NOT NULL, -- 'CREDIT_PURCHASE', 'PAYMENT', 'ADJUSTMENT'
+    method TEXT,        -- 'CASH', 'MOMO', 'BANK'
+    sale_id TEXT,
+    reference TEXT,
+    recorded_at TEXT AS Instant NOT NULL,
+    note TEXT,
+
+    FOREIGN KEY(customer_id) REFERENCES CustomerSearchEntity(customer_id) ON DELETE CASCADE
+);
+
+-- ==========================================
+-- OPERATIONS
+-- ==========================================
+
+insertOrReplace:
+INSERT OR REPLACE INTO CustomerEntity (
+    id, workspace_id, branch_id, full_name, phone, email, is_alerts_consented,
+    credit_limit_amount, credit_limit_currency, current_balance_amount, current_balance_currency,
+    created_at, updated_at
+)
+VALUES (?, ?, ?, ?, ?, ?,
+?,
+?,
+?,
+?,
+?,
+?,
+?);
+
+insertOrReplaceSearch:
+INSERT OR REPLACE INTO CustomerSearchEntity(
+    customer_id, full_name, phone, email,timestamp, workspace_id, branch_id
+) VALUES (?, ?, ?, ?, ?, ?, ?);
+
+
+findByPhone:
+SELECT  * FROM  CustomerSearchEntity WHERE phone = :phone;
+
+findByEmail:
+SELECT  * FROM  CustomerSearchEntity WHERE email = :email;
+
+searchByWs:
+SELECT * FROM CustomerSearchEntity
+WHERE workspace_id = :workspaceId AND (:branchId IS NULL OR branch_id = :branchId);
+
+selectAllLedger:
+SELECT * FROM CustomerLedgerEntity
+LIMIT :limit;
+
+search:
+SELECT * FROM CustomerSearchEntity
+WHERE (:workspaceId IS NULL OR workspace_id = :workspaceId) AND
+ (:branchId IS NULL OR branch_id = :branchId) AND
+ (full_name LIKE '%' || :search || '%' OR (phone IS NOT NULL AND phone LIKE '%' || :search || '%'))
+ORDER BY full_name ASC
+LIMIT :limit OFFSET :offset;
+
+countSearch:
+SELECT COUNT(*) FROM CustomerSearchEntity
+WHERE (:workspaceId IS NULL OR workspace_id = :workspaceId) AND
+ (:branchId IS NULL OR branch_id = :branchId) AND
+ (:search IS NULL OR :search = '' OR full_name LIKE '%' || :search || '%' OR (phone IS NOT NULL AND phone LIKE '%' || :search || '%'));
+
+searchPaged:
+SELECT * FROM CustomerSearchEntity
+WHERE (:workspaceId IS NULL OR workspace_id = :workspaceId) AND
+ (:branchId IS NULL OR branch_id = :branchId) AND
+ (:search IS NULL OR :search = '' OR full_name LIKE '%' || :search || '%' OR (phone IS NOT NULL AND phone LIKE '%' || :search || '%'))
+ORDER BY full_name ASC
+LIMIT :limit OFFSET :offset;
+
+getLedgerByCustomer:
+SELECT * FROM CustomerLedgerEntity
+WHERE customer_id = :customerId
+ORDER BY recorded_at DESC;
+
+maxUpdateAt:
+SELECT MAX(timestamp) FROM CustomerSearchEntity
+WHERE workspace_id = :workspaceId AND branch_id = :branchId;
+
+insertLedger:
+INSERT OR REPLACE INTO CustomerLedgerEntity
+VALUES ?;
+
+deleteLocal:
+DELETE FROM CustomerEntity WHERE id = :id;
+
+selectById:
+SELECT * FROM CustomerEntity WHERE id = :id;
+
+selectItemById:
+SELECT * FROM CustomerSearchEntity WHERE customer_id = :id;
+
+selectLedgerForSale:
+SELECT  * FROM CustomerLedgerEntity WHERE sale_id = :saleId;
+
+getUnsynced:
+SELECT * FROM CustomerEntity WHERE is_syncing = 0;
+
+markSyncing:
+UPDATE CustomerEntity SET is_syncing = 1 WHERE id IN :ids;
+
+unmarkSyncing:
+UPDATE CustomerEntity SET is_syncing = 0 WHERE id IN :ids;
+
+deleteAllForCustomer:
+DELETE FROM CustomerLedgerEntity WHERE customer_id = :customerId;
+DELETE FROM CustomerEntity WHERE id = :customerId;
+DELETE FROM CustomerSearchEntity WHERE customer_id = :customerId;
+
+deleteItem:
+DELETE FROM CustomerSearchEntity WHERE customer_id = :customerId;
+
+softDeleteLocal:
+UPDATE CustomerEntity
+SET full_name = 'Deleted Customer',
+    phone = NULL,
+    email = NULL,
+    is_alerts_consented = 0,
+    deleted_at = :deletedAt,
+    updated_at = :updatedAt
+WHERE id = :customerId;
+
+getChangesSince:
+SELECT * FROM CustomerEntity
+WHERE workspace_id = :workspaceId
+  AND (:branchId IS NULL OR :branchId = '' OR branch_id = :branchId)
+  AND updated_at > :since;
+
+
+
+

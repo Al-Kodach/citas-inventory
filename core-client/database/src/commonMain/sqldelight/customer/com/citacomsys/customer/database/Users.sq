@@ -1,0 +1,37 @@
+import kotlin.time.Instant;
+import com.citacomsys.types.UserStatus;
+import com.citacomsys.types.UserType;
+import kotlin.Boolean;
+
+CREATE TABLE UserEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    phone TEXT NOT NULL,
+    email TEXT,
+    username TEXT NOT NULL UNIQUE,
+    user_type TEXT AS UserType NOT NULL,
+    organization_id TEXT NOT NULL,
+    mfa_enabled INTEGER AS Boolean NOT NULL,
+    is_phone_verified INTEGER AS Boolean NOT NULL,
+    role TEXT NOT NULL,
+    capabilities TEXT NOT NULL,
+    status TEXT AS UserStatus NOT NULL,
+    suspendReason TEXT,
+    created_at TEXT AS Instant NOT NULL,
+    deleted_at TEXT AS Instant,
+    last_updated_at TEXT AS Instant NOT NULL
+);
+
+selectById:
+SELECT * FROM UserEntity WHERE id = ?;
+
+selectByPhone:
+SELECT * FROM UserEntity WHERE phone = ?;
+
+insertOrReplace:
+INSERT OR REPLACE INTO UserEntity VALUES ?;
+
+deleteById:
+DELETE FROM UserEntity WHERE id = ?;
+
+getMaxUpdatedAt:
+SELECT MAX(last_updated_at) FROM UserEntity;

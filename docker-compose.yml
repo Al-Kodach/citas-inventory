@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  citas-server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: citas-server-staging
+    restart: always
+    ports:
+      - "8090:8080"
+    volumes:
+      - app_files:/app/files
+    env_file:
+      - .env
+    environment:
+      - ENV=production
+      - POSTGRES_URL=jdbc:postgresql://postgres:5432/citas_db
+      - POSTGRES_USER=citas_user
+      - POSTGRES_PASSWORD=citas_pass_secret
+      - JWT_SECRET=citas_super_secret_jwt_key_2026
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: citas-postgres-staging
+    restart: always
+    environment:
+      - POSTGRES_DB=citas_db
+      - POSTGRES_USER=citas_user
+      - POSTGRES_PASSWORD=citas_pass_secret
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U citas_user -d citas_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  app_files:

@@ -1,0 +1,69 @@
+import kotlin.time.Instant;
+import com.citacomsys.types.UserStatus;
+import com.citacomsys.types.UserType;
+
+CREATE TABLE AppUserEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    username TEXT NOT NULL,
+    email_masked TEXT,
+    phone_masked TEXT,
+    organization_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    user_type TEXT AS UserType NOT NULL,
+    status TEXT AS UserStatus NOT NULL,
+    suspendReason TEXT,
+    capabilities TEXT NOT NULL,
+    created_at TEXT AS Instant NOT NULL,
+    last_updated_at TEXT AS Instant NOT NULL
+);
+
+CREATE VIEW UserListItem AS
+SELECT
+    u.id,
+    u.name,
+    u.username,
+    u.email_masked AS emailMasked,
+    u.phone_masked AS phoneMasked,
+    u.status,
+    u.role,
+    DATE(u.created_at) AS createdAt
+FROM AppUserEntity u
+WHERE u.status != 'DELETED'
+ORDER BY createdAt ASC;
+
+insertOrReplace:
+INSERT OR REPLACE INTO AppUserEntity VALUES ?;
+
+selectById:
+SELECT * FROM AppUserEntity WHERE id = ?;
+
+selectAll:
+SELECT * FROM UserListItem;
+
+selectUsersPaged:
+SELECT * FROM UserListItem
+WHERE name LIKE '%' || :query || '%' OR username LIKE '%' || :query || '%' || phoneMasked LIKE '%' || :query || '%' || emailMasked LIKE '%' || :query || '%'
+LIMIT :limit
+OFFSET :offset;
+
+search:
+SELECT * FROM UserListItem
+WHERE name LIKE '%' || :query || '%' OR username LIKE '%' || :query || '%';
+
+deleteById:
+DELETE FROM AppUserEntity WHERE id = ?;
+
+suspend:
+UPDATE AppUserEntity SET status = 'SUSPENDED', suspendReason = ?, last_updated_at = ?
+WHERE id = ?;
+
+activate:
+UPDATE AppUserEntity SET status = 'ACTIVE', last_updated_at = ?
+WHERE id = ?;
+
+getMaxUpdatedAt:
+SELECT MAX(last_updated_at) FROM AppUserEntity;
+
+countActiveUsers:
+SELECT COUNT(*) FROM AppUserEntity WHERE status = 'ACTIVE';

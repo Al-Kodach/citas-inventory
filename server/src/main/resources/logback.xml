@@ -1,0 +1,22 @@
+<configuration statusListenerClass="ch.qos.logback.core.status.NopStatusListener">
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="ASYNC_STDOUT" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="STDOUT" />
+        <queueSize>512</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+    </appender>
+
+    <logger name="SecurityConfig" level="INFO" />
+    <logger name="com.citacomsys" level="ALL" />
+    <logger name="io.ktor.server.auth" level="TRACE" />
+    <logger name="io.netty" level="INFO"/>
+
+    <root level="INFO">
+        <appender-ref ref="ASYNC_STDOUT" />
+    </root>
+</configuration>

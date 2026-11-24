@@ -1,0 +1,70 @@
+import kotlin.Boolean;
+
+CREATE TABLE ClientLocalAuditLog (
+    id TEXT NOT NULL PRIMARY KEY,
+    log_source TEXT NOT NULL,       -- 'IDENTITY', 'NETWORK', 'APPLICATION'
+    action_or_event TEXT NOT NULL,   -- e.g., 'STOCK_RESTOCK', 'LOGIN_FAILURE'
+    level TEXT NOT NULL,            -- 'INFO', 'WARN', 'CRITICAL'
+    workspace_id TEXT NOT NULL,
+    branch_id TEXT DEFAULT NULL,    -- Captured target operational branch
+    user_id TEXT DEFAULT NULL,
+    payload TEXT NOT NULL,          -- Flexible structural JSON string mapping details
+
+    is_syncing INTEGER AS Boolean NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL        -- Precision ISO-8601 string tracking
+);
+
+-- Indices for performance queries
+CREATE INDEX idx_local_log_sync ON ClientLocalAuditLog(is_syncing, created_at);
+CREATE INDEX idx_local_log_source ON ClientLocalAuditLog(log_source);
+
+-- ==========================================
+-- OPERATIONS
+-- ==========================================
+
+insertLog:
+INSERT INTO ClientLocalAuditLog (id, log_source, action_or_event, level, workspace_id, branch_id, user_id, payload, is_syncing, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?);
+
+-- Time-slice chunking selector query
+getLogsForSync:
+SELECT * FROM ClientLocalAuditLog
+WHERE is_syncing = 0
+  AND log_source IN :allowedSources
+  AND created_at <= :timeCutoff
+ORDER BY created_at ASC
+LIMIT :limit;
+
+markAsSyncing:
+UPDATE ClientLocalAuditLog SET is_syncing = 1 WHERE id IN :ids;
+
+unmarkAsSyncing:
+UPDATE ClientLocalAuditLog SET is_syncing = 0 WHERE id IN :ids;
+
+deleteSyncedLogs:
+DELETE FROM ClientLocalAuditLog WHERE id IN :ids;
+
+deleteAllLogs:
+DELETE FROM ClientLocalAuditLog;
+
+deleteLogsBySource:
+DELETE FROM ClientLocalAuditLog WHERE log_source = :logSource;
+
+-- Prunes the oldest records once the table size exceeds a strict hardware threshold boundary
+pruneExcessLogs:
+DELETE FROM ClientLocalAuditLog
+WHERE id IN (
+    SELECT id FROM ClientLocalAuditLog
+    ORDER BY created_at ASC
+    LIMIT MAX(0, (SELECT COUNT(*) FROM ClientLocalAuditLog) - :retentionCap)
+);
+
+-- Returns the total footprint count sitting on disk
+countAllLocalLogs:
+SELECT COUNT(*) FROM ClientLocalAuditLog;
+
+-- Added utility query needed for the ViewModel feed
+getLatestLocalLogs:
+SELECT * FROM ClientLocalAuditLog
+ORDER BY created_at DESC
+LIMIT :limit;

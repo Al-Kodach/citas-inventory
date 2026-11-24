@@ -1,0 +1,181 @@
+import kotlin.time.Instant;
+
+-- ==============================================================================
+-- BATCH SNAPSHOT (Operational batch data landing table, aligned 1:1 with BatchItem)
+-- ==============================================================================
+CREATE TABLE BatchSnapshotEntity (
+    batch_id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    product_id TEXT NOT NULL,
+    branch_id TEXT NOT NULL,
+    batch_number TEXT NOT NULL,
+    available_quantity INTEGER NOT NULL,
+    selling_price_amount_minor INTEGER NOT NULL,
+    selling_price_currency TEXT NOT NULL,
+    expiry_date TEXT,
+    version_timestamp TEXT AS Instant NOT NULL
+);
+
+-- Indices for performance
+CREATE INDEX idx_snapshot_workspace ON BatchSnapshotEntity(workspace_id);
+CREATE INDEX idx_snapshot_product ON BatchSnapshotEntity(product_id);
+CREATE INDEX idx_snapshot_branch ON BatchSnapshotEntity(branch_id);
+CREATE INDEX idx_snapshot_version ON BatchSnapshotEntity(version_timestamp);
+
+-- ==========================================
+-- WRITES
+-- ==========================================
+
+insertOrReplace:
+INSERT OR REPLACE INTO BatchSnapshotEntity
+VALUES ?;
+
+insertPlaceholderStub:
+INSERT OR IGNORE INTO BatchSnapshotEntity (
+    batch_id, workspace_id, product_id, branch_id,
+    batch_number, available_quantity,
+    selling_price_amount_minor, selling_price_currency,
+    expiry_date, version_timestamp
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+
+-- ==========================================
+-- READS
+-- ==========================================
+
+selectById:
+SELECT * FROM BatchSnapshotEntity WHERE batch_id = :batchId;
+
+selectByProductId:
+SELECT * FROM BatchSnapshotEntity WHERE product_id = :productId;
+
+selectByNumber:
+SELECT * FROM BatchSnapshotEntity WHERE batch_number = :number AND product_id = :pId;
+
+search:
+SELECT  * FROM BatchSnapshotEntity
+WHERE :workspaceId IS NULL  OR workspace_id = :workspaceId
+    AND (:branchId IS NULL OR branch_id = :branchId OR branch_id = '')
+    AND (
+        :query IS NULL OR :query = '' OR
+        batch_number LIKE '%' || :query || '%'
+    );
+
+selectLiveAvailableForProduct:
+SELECT
+    s.batch_id,
+    s.workspace_id,
+    s.product_id,
+    s.branch_id,
+    s.batch_number,
+    s.selling_price_amount_minor,
+    s.selling_price_currency,
+    s.expiry_date,
+    CAST(
+        s.available_quantity + COALESCE(local_delta.qty, 0)
+    AS INTEGER) AS live_available
+FROM BatchSnapshotEntity s
+LEFT JOIN (
+    SELECT
+        batch_id,
+        branch_id,
+        SUM(CASE WHEN type = 'OUT' THEN -quantity ELSE quantity END) AS qty
+    FROM StockMovementEntity
+    WHERE is_accounted_for = 0
+    GROUP BY batch_id, branch_id
+) AS local_delta ON local_delta.batch_id = s.batch_id AND local_delta.branch_id = s.branch_id
+WHERE s.product_id = :productId AND s.branch_id = :branchId
+  AND (s.available_quantity + COALESCE(local_delta.qty, 0)) > 0
+ORDER BY
+    COALESCE(s.expiry_date, '9999-12-31') ASC,
+    (s.available_quantity + COALESCE(local_delta.qty, 0)) DESC;
+
+-- ==========================================
+-- READS FOR SYNCHRONIZATION
+-- ==========================================
+
+getMaxSnapshotVersionTimestamp:
+SELECT MAX(version_timestamp) FROM BatchSnapshotEntity;
+
+getMaxSnapshotVersionTimestampForWorkspace:
+SELECT MAX(version_timestamp) FROM BatchSnapshotEntity
+WHERE workspace_id = :workspaceId;
+
+-- getUnaccountedMovements:
+-- SELECT * FROM StockMovementEntity
+-- WHERE is_accounted_for = 0;
+
+-- markAsAccountedForBatch:
+-- UPDATE StockMovementEntity
+-- SET is_accounted_for = 1
+-- WHERE batch_id = :batch_id
+--   AND created_at <= :cutoffTimestamp;
+
+getLiveChangeList:
+SELECT
+    s.batch_id,
+    s.workspace_id,
+    s.product_id,
+    s.branch_id,
+    s.batch_number,
+    CAST(
+        s.available_quantity + COALESCE(local_delta.qty, 0)
+    AS INTEGER) AS available_quantity,
+    s.selling_price_amount_minor,
+    s.selling_price_currency,
+    s.expiry_date,
+    s.version_timestamp
+FROM BatchSnapshotEntity s
+LEFT JOIN (
+    SELECT
+        batch_id,
+        branch_id,
+        SUM(CASE WHEN type = 'OUT' THEN -quantity ELSE quantity END) AS qty
+    FROM StockMovementEntity
+    WHERE is_accounted_for = 0
+    GROUP BY batch_id, branch_id
+) AS local_delta ON local_delta.batch_id = s.batch_id AND local_delta.branch_id = s.branch_id
+WHERE s.workspace_id = :workspaceId AND (:branchId IS NULL OR s.branch_id = :branchId)
+  AND (s.version_timestamp > :since);
+
+
+-- ==========================================
+-- CLEANUP
+-- ==========================================
+
+deleteByBatch:
+DELETE FROM BatchSnapshotEntity WHERE batch_id = ?;
+
+deleteByProduct:
+DELETE FROM BatchSnapshotEntity WHERE product_id = ?;
+
+deleteAll:
+DELETE FROM BatchSnapshotEntity;
+
+deleteProductStub:
+DELETE FROM BatchSnapshotEntity
+WHERE product_id = :productId
+  AND batch_id = :productId;
+
+deleteStubsForProducts:
+DELETE FROM BatchSnapshotEntity
+WHERE product_id IN :productIds
+  AND batch_id = product_id;
+
+deleteSnapshotsForProduct:
+DELETE FROM BatchSnapshotEntity
+WHERE product_id = :productId;
+
+deleteSnapshotForBatch:
+DELETE FROM BatchSnapshotEntity
+WHERE batch_id = :batchId;
+
+countActiveLinesForProduct:
+SELECT COUNT(*)
+FROM BatchSnapshotEntity
+WHERE product_id = :productId;
+
+countActiveBatchesForWorkspace:
+SELECT COUNT(*)
+FROM BatchSnapshotEntity
+WHERE workspace_id = :workspaceId AND available_quantity > 0;

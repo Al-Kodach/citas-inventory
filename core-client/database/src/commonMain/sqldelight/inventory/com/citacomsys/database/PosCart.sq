@@ -1,0 +1,60 @@
+import kotlin.Boolean;
+import kotlin.time.Instant;
+
+CREATE TABLE PosCartEntity (
+    id TEXT PRIMARY KEY NOT NULL,
+    workspace_id TEXT NOT NULL DEFAULT '',
+    branch_id TEXT NOT NULL DEFAULT '',
+    name TEXT,
+    last_updated_at TEXT AS Instant NOT NULL,
+    is_active INTEGER AS Boolean NOT NULL DEFAULT 0,
+    customer_id TEXT,
+    customer_name TEXT,
+    customer_phone TEXT
+);
+
+CREATE TABLE PosCartItemEntity (
+    id TEXT PRIMARY KEY NOT NULL,
+    cart_id TEXT NOT NULL REFERENCES PosCartEntity(id) ON DELETE CASCADE,
+    product_id TEXT NOT NULL,
+    product_name TEXT NOT NULL,
+    unit_price_minor INTEGER NOT NULL,
+    unit_price_currency TEXT NOT NULL,
+    quantity INTEGER NOT NULL
+);
+
+-- Indices
+CREATE INDEX idx_cart_ws_branch ON PosCartEntity(workspace_id, branch_id, is_active);
+CREATE INDEX idx_cart_items_cart_id ON PosCartItemEntity(cart_id);
+
+-- Queries
+insertCart:
+INSERT OR REPLACE INTO PosCartEntity VALUES ?;
+
+updateCartTimestamp:
+UPDATE PosCartEntity SET last_updated_at = :timestamp WHERE id = :id;
+
+setActiveCart:
+UPDATE PosCartEntity SET is_active = (id == :id) WHERE workspace_id = :workspaceId AND branch_id = :branchId;
+
+deleteCart:
+DELETE FROM PosCartEntity WHERE id = :id AND workspace_id = :workspaceId AND branch_id = :branchId;
+
+deleteAllCarts:
+DELETE FROM PosCartEntity;
+
+insertCartItem:
+INSERT OR REPLACE INTO PosCartItemEntity VALUES ?;
+
+deleteCartItems:
+DELETE FROM PosCartItemEntity WHERE cart_id = ?;
+
+-- Reads
+selectAllCarts:
+SELECT * FROM PosCartEntity WHERE workspace_id = :workspaceId AND branch_id = :branchId ORDER BY last_updated_at DESC;
+
+selectActiveCart:
+SELECT * FROM PosCartEntity WHERE workspace_id = :workspaceId AND branch_id = :branchId AND is_active = 1 LIMIT 1;
+
+selectItemsForCart:
+SELECT * FROM PosCartItemEntity WHERE cart_id = ?;

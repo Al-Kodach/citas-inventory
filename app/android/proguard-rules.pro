@@ -1,0 +1,16 @@
+-keep class com.citacomsys.** { *; }
+-keep class io.ktor.** { *; }
+-keep class org.koin.** { *; }
+-keep class kotlinx.serialization.** { *; }
+-dontwarn io.ktor.**
+-dontwarn kotlinx.serialization.**
+-dontwarn org.koin.**
+-dontwarn org.slf4j.**
+-dontwarn org.apache.logging.log4j.**
+-dontwarn io.netty.**
+-dontwarn javax.naming.**
+-dontwarn jdk.jfr.**
+-dontwarn org.apache.log4j.**
+-dontwarn org.bouncycastle.**
+-dontwarn org.conscrypt.**
+-dontwarn reactor.blockhound.**

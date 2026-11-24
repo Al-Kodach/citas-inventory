@@ -1,0 +1,133 @@
+import kotlin.time.Instant;
+
+CREATE TABLE SaleEntity (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    branch_id TEXT NOT NULL,
+    customer_id TEXT, -- Reference to customer
+    total_amount_minor INTEGER NOT NULL,
+    total_amount_currency TEXT NOT NULL,
+    total_items INTEGER NOT NULL,
+    price_variance INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL,
+    actor_id TEXT NOT NULL,
+    created_at TEXT AS Instant NOT NULL
+);
+
+-- Sale items --
+CREATE TABLE SaleItemEntity (
+    id TEXT PRIMARY KEY,
+    sale_id TEXT NOT NULL REFERENCES SaleEntity(id) ON DELETE CASCADE,
+    branch_id TEXT NOT NULL,
+    product_id TEXT NOT NULL REFERENCES ProductItemEntity(id),
+    product_name TEXT NOT NULL,
+    batch_id TEXT NOT NULL,
+    batch_number TEXT,
+    quantity INTEGER NOT NULL,
+    sold_price_minor INTEGER NOT NULL,
+    sold_price_currency TEXT NOT NULL,
+    price_variance INTEGER NOT NULL DEFAULT 0
+);
+
+-- Payments --
+CREATE TABLE PaymentEntity(
+    id TEXT PRIMARY KEY NOT NULL,
+    sale_id TEXT NOT NULL REFERENCES SaleEntity(id) ON DELETE CASCADE,
+    method TEXT NOT NULL,
+    amount_minor INTEGER NOT NULL,
+    currency_code TEXT NOT NULL,
+    reference TEXT,
+    created_at TEXT AS Instant NOT NULL
+);
+
+-- The Unified View for UI Operations --
+CREATE VIEW SaleTransactionView AS
+SELECT
+    s.id,
+    s.branch_id,
+    s.workspace_id,
+    s.customer_id,
+    s.total_amount_minor,
+    s.total_amount_currency,
+    s.total_items AS totalItems,
+    s.price_variance AS priceVariance,
+    s.status,
+    s.created_at AS createdAt,
+    u.name AS actorName
+FROM SaleEntity s
+LEFT JOIN AppUserEntity u ON s.actor_id = u.id;
+
+-- Queries --
+
+insert:
+INSERT OR REPLACE INTO SaleEntity
+VALUES ?;
+
+select:
+SELECT * FROM SaleEntity WHERE id = ?;
+
+countSales:
+SELECT COUNT(*) FROM SaleEntity;
+
+-- UI Queries using the View --
+
+selectAll:
+SELECT * FROM SaleTransactionView
+WHERE (:branchId IS NULL OR branch_id = :branchId) AND workspace_id = :wsId
+ORDER BY createdAt DESC;
+
+selectRecent:
+SELECT * FROM SaleTransactionView
+WHERE createdAt >= :cutoff
+  AND (:branchId IS NULL OR branch_id = :branchId) AND workspace_id = :wsId
+ORDER BY createdAt DESC;
+
+selectById:
+SELECT * FROM SaleTransactionView
+WHERE id = ?;
+
+search:
+SELECT * FROM SaleTransactionView
+WHERE (:branchId IS NULL OR branch_id = :branchId) AND (
+    id LIKE '%' || :query || '%'
+    OR status LIKE '%' || :query || '%'
+    OR actorName LIKE '%' || :query || '%'
+    OR total_amount_minor LIKE '%' || :query || '%'
+) AND workspace_id = :wsId
+ORDER BY createdAt DESC;
+
+searchFiltered:
+SELECT * FROM SaleTransactionView
+WHERE (:branchId IS NULL OR branch_id = :branchId) AND (
+    id LIKE '%' || :query || '%'
+    OR status LIKE '%' || :query || '%'
+    OR actorName LIKE '%' || :query || '%'
+    OR total_amount_minor LIKE '%' || :query || '%'
+)
+AND createdAt >= :cutoff AND workspace_id = :wsId
+ORDER BY createdAt DESC;
+
+-- Maintenance --
+
+delete:
+DELETE FROM SaleEntity WHERE id IN ?;
+
+deleteAll:
+DELETE FROM SaleEntity;
+
+-- Child Records Queries --
+
+insertOrUpdateSaleItem:
+INSERT OR REPLACE INTO SaleItemEntity VALUES ?;
+
+selectItemsBySaleId:
+SELECT * FROM SaleItemEntity WHERE sale_id = ?;
+
+insertOrUpdatePayment:
+INSERT OR REPLACE INTO PaymentEntity VALUES ?;
+
+selectPaymentsBySaleId:
+SELECT * FROM PaymentEntity WHERE sale_id = ?;
+
+selectByCustomerId:
+SELECT * FROM SaleTransactionView WHERE customer_id = ? ORDER BY createdAt DESC;

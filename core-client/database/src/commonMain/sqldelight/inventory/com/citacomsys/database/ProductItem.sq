@@ -1,0 +1,67 @@
+import kotlin.time.Instant;
+import kotlin.Boolean;
+
+-- ==============================================================================
+-- PRODUCT MASTER ITEM LANDING TABLE (Minimal Product Master for POS & Catalog)
+-- ==============================================================================
+CREATE TABLE ProductItemEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+
+    -- Minimal Identity
+    name TEXT NOT NULL,
+    brand_name TEXT NOT NULL,
+    sku TEXT,
+    barcode TEXT,
+    unit_of_measure TEXT NOT NULL DEFAULT 'Piece',
+    reorder_level INTEGER AS kotlin.Int NOT NULL DEFAULT 0,
+    product_type TEXT NOT NULL,
+
+    -- Aggregates & Denormalized Defaults
+    total_available INTEGER AS kotlin.Int NOT NULL DEFAULT 0,
+    current_price_amount_minor INTEGER NOT NULL DEFAULT 0,
+    current_price_currency TEXT NOT NULL DEFAULT 'GHS',
+
+    -- Lifecycle & Sync
+    version_timestamp TEXT AS Instant NOT NULL,
+    is_active INTEGER AS Boolean NOT NULL DEFAULT 1
+);
+
+-- Indices
+CREATE INDEX idx_product_item_workspace ON ProductItemEntity(workspace_id);
+
+-- Writes
+insertOrReplace:
+INSERT OR REPLACE INTO ProductItemEntity
+VALUES ?;
+
+deleteById:
+DELETE FROM ProductItemEntity WHERE id = ?;
+
+deleteAll:
+DELETE FROM ProductItemEntity;
+
+-- Reads
+selectById:
+SELECT * FROM ProductItemEntity WHERE id = ?;
+
+selectByWorkspace:
+SELECT * FROM ProductItemEntity WHERE workspace_id = :workspaceId AND is_active = 1 ORDER BY name ASC;
+
+search:
+SELECT * FROM ProductItemEntity
+WHERE is_active = 1 AND workspace_id = :workspaceId AND (
+    name LIKE ('%' || :query || '%') OR
+    brand_name LIKE ('%' || :query || '%') OR
+    sku LIKE ('%' || :query || '%') OR
+    barcode LIKE ('%' || :query || '%')
+)
+ORDER BY name ASC
+LIMIT :limit
+OFFSET :offset;
+
+getProductMaxUpdateTimestampForWorkspace:
+SELECT MAX(version_timestamp) FROM ProductItemEntity WHERE workspace_id = ?;
+
+count:
+SELECT COUNT(*) FROM ProductItemEntity WHERE is_active = 1 AND workspace_id = :workspaceId;

@@ -1,0 +1,41 @@
+import kotlin.Boolean;
+import kotlin.time.Instant;
+
+CREATE TABLE BranchEntity (
+    id TEXT PRIMARY KEY NOT NULL,
+    workspace_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    location_code TEXT NOT NULL,
+    address_json TEXT,
+    contact_phone TEXT,
+    email TEXT,
+    website TEXT,
+    is_active INTEGER AS Boolean NOT NULL DEFAULT 1,
+    created_at TEXT AS Instant NOT NULL,
+    updated_at TEXT AS Instant NOT NULL,
+    UNIQUE(workspace_id, location_code),
+    UNIQUE(workspace_id, name)
+);
+
+insertOrReplace:
+INSERT OR REPLACE INTO BranchEntity
+VALUES ?;
+
+upsert:
+INSERT OR REPLACE INTO BranchEntity(
+id, workspace_id, name, location_code, address_json, contact_phone, email, website,
+is_active, created_at, updated_at
+)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectByTenant:
+SELECT * FROM BranchEntity WHERE workspace_id = ?;
+
+selectById:
+SELECT * FROM BranchEntity WHERE id = ?;
+
+deleteById:
+DELETE FROM BranchEntity WHERE id = ?;
+
+deleteAll:
+DELETE FROM BranchEntity;

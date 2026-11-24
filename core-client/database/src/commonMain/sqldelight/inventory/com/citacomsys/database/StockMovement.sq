@@ -1,0 +1,147 @@
+import kotlin.time.Instant;
+import kotlin.Boolean;
+
+CREATE TABLE StockMovementEntity (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    branch_id TEXT NOT NULL,
+    product_id TEXT NOT NULL, -- References ProductEntity(id)
+    batch_id TEXT NOT NULL,   -- References StockBatchEntity(id)
+
+    type TEXT NOT NULL, -- 'IN' or 'OUT'
+    reason TEXT,
+
+    -- Quantity is always stored as a positive absolute value.
+    -- Logic for -/+ is handled in the queries based on the 'type' column.
+    quantity INTEGER NOT NULL,
+
+    reference_id TEXT,    -- e.g., Sale UUID, Purchase Order ID
+    reference_type TEXT,  -- SALE, PURCHASE, ADJUSTMENT_IN, ADJUSTMENT_OUT, RETURN
+
+    actor_type TEXT NOT NULL DEFAULT 'USER',
+    batch_number TEXT NOT NULL,
+
+    actor_id TEXT NOT NULL,
+    created_at INTEGER AS Instant NOT NULL,
+
+    -- THE RECONCILIATION PIVOT:
+    -- 0 (False): Local movement created offline. Not yet reflected in the server's snapshot.
+    -- 1 (True): This movement has been acknowledged by the server or absorbed by a newer snapshot.
+    is_accounted_for INTEGER AS Boolean NOT NULL DEFAULT 0
+);
+
+-- Indices for performance
+CREATE INDEX idx_stock_unaccounted ON StockMovementEntity(product_id) WHERE is_accounted_for = 0;
+CREATE INDEX idx_stock_product ON StockMovementEntity(product_id);
+CREATE INDEX idx_stock_created_at ON StockMovementEntity(created_at);
+
+-- ==========================================
+-- WRITES
+-- ==========================================
+
+insert:
+INSERT INTO StockMovementEntity
+VALUES ?;
+
+
+-- Mark movements as accounted for once a new server snapshot is received
+-- with a version_timestamp >= these movements' created_at
+markAsAccountedForProduct:
+UPDATE StockMovementEntity
+SET is_accounted_for = 1
+WHERE product_id = :productId
+  AND created_at <= :snapshotTimestamp;
+
+
+-- Mark movements as accounted for if they are older than the snapshot we just got
+markAsAccountedForBatch:
+UPDATE StockMovementEntity
+SET is_accounted_for = 1
+WHERE batch_id = :batch_id AND created_at <= :cutoffTimestamp;
+
+
+-- Cleanup: Delete old accounted movements to save local storage
+deleteAccountedMovements:
+DELETE FROM StockMovementEntity
+WHERE is_accounted_for = 1
+  AND created_at < :cutoff;
+
+
+-- ==========================================
+-- RECONCILIATION (STOCK MATH)
+-- ==========================================
+
+-- Sum of all local activity not yet in the server's totals.
+-- Returns total = (-out + in)
+calculateLocalDelta:
+SELECT
+    COALESCE(SUM(
+        CASE
+            WHEN type = 'OUT' THEN -quantity
+            ELSE quantity
+        END
+    ), 0) AS delta
+FROM StockMovementEntity
+WHERE product_id = :productId
+  AND is_accounted_for = 0;
+
+
+-- ==========================================
+-- READS / VISIBILITY
+-- ==========================================
+
+selectAll:
+SELECT * FROM StockMovementEntity
+ORDER BY created_at DESC;
+
+
+-- Standard Ledger/Movement History with Retention Window
+selectRecent:
+SELECT * FROM StockMovementEntity
+WHERE created_at >= :cutoff
+ORDER BY created_at DESC;
+
+-- Count
+count:
+SELECT COUNT(*) FROM StockMovementEntity;
+
+
+-- Filtered product history (Soft Limit based on Tier)
+selectByProductFiltered:
+SELECT m.* FROM StockMovementEntity m
+WHERE m.product_id = :productId
+  AND (:branchId IS NULL OR :branchId = '' OR m.branch_id = :branchId)
+  AND m.created_at >= :cutoff
+ORDER BY m.created_at DESC;
+
+selectById:
+SELECT * FROM StockMovementEntity WHERE id = :id;
+
+selectByProduct:
+SELECT * FROM StockMovementEntity
+WHERE product_id = :productId AND (:branchId IS NULL OR :branchId = '' OR branch_id = :branchId)
+ORDER BY created_at DESC;
+
+selectByBatch:
+SELECT * FROM StockMovementEntity
+WHERE batch_id = :batchId AND (:branchId IS NULL OR :branchId = '' OR branch_id = :branchId)
+ORDER BY created_at DESC;
+
+-- Get max created_at for delta sync anchors
+getMaxCreatedAtForProduct:
+SELECT MAX(created_at) FROM StockMovementEntity
+WHERE product_id = :productId AND (:branchId IS NULL OR :branchId = '' OR branch_id = :branchId);
+
+-- find dirty batch -> Local delete
+isBatchDirty:
+SELECT COUNT(*) FROM StockMovementEntity WHERE batch_id = ?;
+
+-- ==========================================
+-- CLEANUP
+-- ==========================================
+
+deleteById:
+DELETE FROM StockMovementEntity WHERE id = ?;
+
+deleteAll:
+DELETE FROM StockMovementEntity;

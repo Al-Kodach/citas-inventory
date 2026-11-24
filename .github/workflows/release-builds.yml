@@ -1,0 +1,114 @@
+name: Citas SaaS Cross-Platform Release Build & Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-android-and-linux:
+    name: Build Android (AAB/APK) & Linux (.deb)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Grant Executable Permission to Gradlew
+        run: chmod +x gradlew
+
+      - name: Build Android Release App Bundle & APK
+        run: ./gradlew :app:android:bundleRelease :app:android:assembleRelease
+
+      - name: Build Linux Native Desktop Package (.deb)
+        run: ./gradlew :app:desktop:packageDeb
+
+      - name: Upload Android Release Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release-builds
+          path: |
+            app/android/build/outputs/bundle/release/*.aab
+            app/android/build/outputs/apk/release/*.apk
+
+      - name: Upload Linux Desktop Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-desktop-deb
+          path: app/desktop/build/compose/binaries/main/deb/*.deb
+
+  build-windows:
+    name: Build Windows (.msi)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Build Windows Native Desktop Package (.msi)
+        run: .\gradlew.bat :app:desktop:packageMsi
+
+      - name: Upload Windows Desktop Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-desktop-msi
+          path: app/desktop/build/compose/binaries/main/msi/*.msi
+
+  build-macos:
+    name: Build macOS (.dmg)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Grant Executable Permission to Gradlew
+        run: chmod +x gradlew
+
+      - name: Build macOS Native Desktop Package (.dmg)
+        run: ./gradlew :app:desktop:packageDmg
+
+      - name: Upload macOS Desktop Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-desktop-dmg
+          path: app/desktop/build/compose/binaries/main/dmg/*.dmg
+
+  publish-release-assets:
+    name: Attach Binaries to GitHub Release
+    needs: [build-android-and-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Download All Build Artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create GitHub Release & Attach Binary Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            android-release-builds/*
+            linux-desktop-deb/*
+            windows-desktop-msi/*
+            macos-desktop-dmg/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

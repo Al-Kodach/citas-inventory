@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+<!--    <domain-config>-->
+<!--        <domain includeSubdomains="true">ngrok-free.dev</domain>-->
+<!--        <domain includeSubdomains="true">ngrok.app</domain>-->
+<!--        <domain includeSubdomains="true">ngrok.io</domain>-->
+
+<!--        <pin-set expiration="2027-01-01">-->
+<!--            <pin digest="SHA-256">C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=</pin>-->
+<!--            <pin digest="SHA-256">h6801mQoA1kw3S8W9CAfnoXRpECiQM76mP8u8Vv4Q+E=</pin>-->
+<!--            <pin digest="SHA-256">Vjs8r4z+80wjNcr1YKepWQboSIRi63WsWXhIMN+eWys=</pin>-->
+<!--        </pin-set>-->
+<!--    </domain-config>-->
+
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>

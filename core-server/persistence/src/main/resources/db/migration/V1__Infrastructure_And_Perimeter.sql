@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS operational_health_logs (
     branch_id               UUID,
     device_id               VARCHAR(255),
     product_type            VARCHAR(50) NOT NULL,
-    level                   VARCHAR(20) NOT NULL DEFAULT 'INFO',
+    _level                   VARCHAR(20) NOT NULL DEFAULT 'INFO',
     component               VARCHAR(100) NOT NULL,
     message                 TEXT NOT NULL,
     execution_time_ms       BIGINT,
@@ -155,6 +155,7 @@ CREATE TABLE IF NOT EXISTS workspace_resources (
     id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     workspace_id            UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     package_id              VARCHAR(50) NOT NULL,
+    package_tier            VARCHAR(50) NOT NULL,
     package_name            VARCHAR(255) NOT NULL,
     max_users               INTEGER NOT NULL,
     max_device              INTEGER NOT NULL,
@@ -162,7 +163,8 @@ CREATE TABLE IF NOT EXISTS workspace_resources (
     max_products_limit      INTEGER NOT NULL,
     max_active_batches_limit INTEGER NOT NULL,
     retention_months        INTEGER NOT NULL,
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS workspace_modules (

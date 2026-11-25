@@ -9,7 +9,7 @@ object WorkspaceResources : Table("workspace_resources") {
     val workspaceId = uuid("workspace_id").references(Workspaces.id)
     val packageId = varchar("package_id", 50)
     val packageName = varchar("package_name", 255)
-    val tier = enumerationByName<PackageTier>("tier", 50)
+    val tier = enumerationByName<PackageTier>("package_tier", 50)
 
     val maxUsers = integer("max_users")
     val maxDevice = integer("max_device")

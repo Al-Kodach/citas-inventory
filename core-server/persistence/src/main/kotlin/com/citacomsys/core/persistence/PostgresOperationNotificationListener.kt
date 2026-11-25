@@ -60,8 +60,8 @@ internal class PostgresOperationNotificationListener(
                                             val entityId = jsonObject["entityId"]?.jsonPrimitive?.content ?: ""
                                             val hardwareId = jsonObject["hardwareId"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() && it != "null" }
                                             val userId = jsonObject["userId"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() && it != "null" }
-                                            val orgId = jsonObject.getString("organizationId")
-                                            val wsId = jsonObject.getString("workspaceId").ifBlank { null }
+                                            val orgId = jsonObject["organizationId"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() && it != "null" } ?: ""
+                                            val wsId = jsonObject["workspaceId"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() && it != "null" }
                                             val action = jsonObject["action"]?.jsonPrimitive?.content ?: "UPDATE"
 
                                             dispatchOperationEvent(

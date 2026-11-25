@@ -1,11 +1,20 @@
 package com.citacomsys.types
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.jvm.JvmInline
 
-
-@Serializable
+@Serializable(with = PhoneNumberSerializer::class)
 @JvmInline
 @SerialName("PhoneNumber")
 value class PhoneNumber(val value: String) {
@@ -50,10 +59,33 @@ value class PhoneNumber(val value: String) {
     }
 }
 
+object PhoneNumberSerializer : KSerializer<PhoneNumber> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("PhoneNumber", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: PhoneNumber) {
+        encoder.encodeString(value.value)
+    }
+
+    override fun deserialize(decoder: Decoder): PhoneNumber {
+        val input = decoder as? JsonDecoder 
+            ?: return PhoneNumber(decoder.decodeString())
+        val element = input.decodeJsonElement()
+        val rawStr = when (element) {
+            is JsonPrimitive -> element.content
+            is JsonObject -> {
+                val country = element["countryCode"]?.jsonPrimitive?.content ?: ""
+                val national = element["nationalNumber"]?.jsonPrimitive?.content ?: ""
+                "$country$national"
+            }
+            else -> element.toString()
+        }
+        return PhoneNumber.tryCreate(rawStr) ?: PhoneNumber(rawStr)
+    }
+}
+
 // The Bridge
 internal expect object PhoneNumberFormatter {
     fun formatE164(raw: String): String
     fun formatNational(raw: String): String
     fun isValid(raw: String): Boolean
 }
-

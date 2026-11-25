@@ -1,36 +1,13 @@
 package com.citacomsys.sales.ui.screen.pos
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -40,16 +17,21 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.citacomsys.api.sales.PaymentMethod
+import com.citacomsys.api.sales.SaleDetails
 import com.citacomsys.core.components.navigationsuite.AllAdaptivePreviews
+import com.citacomsys.core.printer.PrintPageFormat
+import com.citacomsys.core.printer.ReceiptItem
+import com.citacomsys.core.printer.ReceiptPrintJob
+import com.citacomsys.core.printer.ui.ReceiptView
 import com.citacomsys.core.resources.AppIcons
+import com.citacomsys.core.ui.result.UiResult
 import com.citacomsys.module.api.customer.CustomerItem
 import com.citacomsys.types.PhoneNumber
 import com.design.AppTheme
 import com.design.components.AppScaffold
-import kotlinx.coroutines.delay
 import org.koin.compose.viewmodel.koinViewModel
-import kotlin.time.Duration.Companion.milliseconds
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PosPaymentScreen(
     viewModel: PosViewModel = koinViewModel(),
@@ -57,11 +39,47 @@ fun PosPaymentScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val selectedCustomer = uiState.selectedCustomer
+    val completedSaleId = uiState.completedSaleId
 
-    LaunchedEffect(uiState) {
-        if (uiState.completedSaleId != null) {
-            delay(500.milliseconds)
-            onBack()
+    if (completedSaleId != null) {
+        val completedSaleDetails by viewModel.completedSaleDetails.collectAsStateWithLifecycle()
+        val printState by viewModel.printState.collectAsStateWithLifecycle()
+        val autoPrintEnabled by viewModel.autoPrintEnabled.collectAsStateWithLifecycle()
+        val selectedPaperFormat by viewModel.selectedPaperFormat.collectAsStateWithLifecycle()
+
+        LaunchedEffect(completedSaleDetails, autoPrintEnabled) {
+            val details = (completedSaleDetails as? UiResult.Success)?.data
+            if (details != null && autoPrintEnabled && printState !is UiResult.Success) {
+                val format =
+                    if (selectedPaperFormat == "58mm") PrintPageFormat.Receipt58mm() else PrintPageFormat.Receipt80mm()
+                viewModel.printReceipt(details, format, silent = true)
+            }
+        }
+
+        ModalBottomSheet(
+            onDismissRequest = {
+                viewModel.clearState()
+                onBack()
+            },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ) {
+            ReceiptSheetContent(
+                saleDetailsResult = completedSaleDetails,
+                printState = printState,
+                autoPrintEnabled = autoPrintEnabled,
+                selectedPaperFormat = selectedPaperFormat,
+                onToggleAutoPrint = viewModel::toggleAutoPrint,
+                onSelectFormat = viewModel::setReceiptPaperFormat,
+                onPrintManual = { details ->
+                    val format =
+                        if (selectedPaperFormat == "58mm") PrintPageFormat.Receipt58mm() else PrintPageFormat.Receipt80mm()
+                    viewModel.printReceipt(details, format, silent = false)
+                },
+                onDone = {
+                    viewModel.clearState()
+                    onBack()
+                }
+            )
         }
     }
 
@@ -288,7 +306,6 @@ fun CustomerLedgerSummaryContent(customer: CustomerItem?) {
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Customer Identity Summary
         Surface(
             shape = RoundedCornerShape(12.dp),
             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
@@ -370,6 +387,216 @@ private fun PaymentMethodItem(
                 onClick = null,
                 enabled = enabled
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReceiptSheetContent(
+    saleDetailsResult: UiResult<SaleDetails>,
+    printState: UiResult<Unit>,
+    autoPrintEnabled: Boolean,
+    selectedPaperFormat: String,
+    onToggleAutoPrint: (Boolean) -> Unit,
+    onSelectFormat: (String) -> Unit,
+    onPrintManual: (SaleDetails) -> Unit,
+    onDone: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+            modifier = Modifier.size(56.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = AppIcons.CheckCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+        }
+
+        Text(
+            text = "Sale Finalized",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.ExtraBold
+        )
+
+        if (printState is UiResult.Error) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = AppIcons.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = printState.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = AppIcons.Print,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Auto-Print Receipt",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Switch(
+                        checked = autoPrintEnabled,
+                        onCheckedChange = onToggleAutoPrint
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = selectedPaperFormat == "80mm",
+                        onClick = { onSelectFormat("80mm") },
+                        label = { Text("80mm Thermal") }
+                    )
+                    FilterChip(
+                        selected = selectedPaperFormat == "58mm",
+                        onClick = { onSelectFormat("58mm") },
+                        label = { Text("58mm Thermal") }
+                    )
+                }
+            }
+        }
+
+        when (saleDetailsResult) {
+            is UiResult.Loading, UiResult.Idle -> {
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(180.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                }
+            }
+
+            is UiResult.Error -> {
+                Text(
+                    text = saleDetailsResult.message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+
+            is UiResult.Success -> {
+                val details = saleDetailsResult.data
+                val receiptJob = remember(details) {
+                    ReceiptPrintJob(
+                        storeName = "BUSINESS RECEIPT",
+                        receiptNumber = details.sale.id.takeLast(8).uppercase(),
+                        dateTime = details.sale.createdAt.toString().split("T").firstOrNull() ?: "",
+                        cashierName = "Cashier",
+                        customerName = details.sale.customerId,
+                        items = details.items.map { item ->
+                            ReceiptItem(
+                                name = item.productName,
+                                quantity = item.quantity.toString(),
+                                unitPrice = item.unitPrice.formatted,
+                                totalPrice = item.totalPrice.formatted
+                            )
+                        },
+                        subtotal = details.sale.totalAmount.formatted,
+                        tax = "0.00",
+                        total = details.sale.totalAmount.formatted,
+                        paymentMethod = details.payments.firstOrNull()?.method?.name ?: "CASH",
+                        amountPaid = details.payments.firstOrNull()?.amount?.formatted
+                    )
+                }
+                val pageFormat =
+                    if (selectedPaperFormat == "58mm") PrintPageFormat.Receipt58mm() else PrintPageFormat.Receipt80mm()
+
+                ReceiptView(
+                    job = receiptJob,
+                    format = pageFormat,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { onPrintManual(details) },
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = printState !is UiResult.Loading
+                    ) {
+                        if (printState is UiResult.Loading) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                        } else {
+                            Icon(
+                                AppIcons.Print,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Print Receipt Sheet")
+                        }
+                    }
+
+                    Button(
+                        onClick = onDone,
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("New Sale", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
     }
 }

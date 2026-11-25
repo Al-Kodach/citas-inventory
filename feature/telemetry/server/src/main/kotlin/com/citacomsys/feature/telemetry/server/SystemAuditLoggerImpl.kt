@@ -26,12 +26,13 @@ internal class SystemAuditLoggerImpl : TelemetryAuditor {
     override suspend fun logIdentity(event: IdentityLog): Result<Boolean> = runCatching {
         dbQuery {
             IdentityAccessLogs.insert {
-                it.mapMetadata(IdentityAccessLogs, event.metadata)
-
-                it[userId] = event.userId
-                it[action] = event.action
-                it[outcome] = event.outcome
-                it[failureReason] = event.failureReason
+                it[IdentityAccessLogs.organizationId] = event.metadata.orgId?.toUuid()
+                it[IdentityAccessLogs.workspaceId] = event.metadata.workspaceId?.toUuid()
+                it[IdentityAccessLogs.userId] = event.userId
+                it[IdentityAccessLogs.action] = event.action
+                it[IdentityAccessLogs.outcome] = event.outcome
+                it[IdentityAccessLogs.failureReason] = event.failureReason
+                it[IdentityAccessLogs.createdAt] = event.metadata.createdAt
             }
             true
         }
@@ -69,11 +70,11 @@ internal class SystemAuditLoggerImpl : TelemetryAuditor {
         runCatching {
             dbQuery {
                 NetworkSecurityLogs.insert {
-                    it.mapMetadata(NetworkSecurityLogs, event.metadata)
-                    it[clientIp] = event.clientIp
-                    it[endpointRoute] = event.endpointRoute
-                    it[triggerEvent] = event.triggerEvent
-                    it[blockedDurationSeconds] = event.blockedDurationSeconds
+                    it[NetworkSecurityLogs.clientIp] = event.clientIp
+                    it[NetworkSecurityLogs.endpointRoute] = event.endpointRoute
+                    it[NetworkSecurityLogs.triggerEvent] = event.triggerEvent
+                    it[NetworkSecurityLogs.blockedDurationSeconds] = event.blockedDurationSeconds
+                    it[NetworkSecurityLogs.createdAt] = event.metadata.createdAt
                 }
                 true
             }
@@ -83,11 +84,10 @@ internal class SystemAuditLoggerImpl : TelemetryAuditor {
         runCatching {
             dbQuery {
                 OperationalHealthLogs.insert {
-                    it.mapMetadata(OperationalHealthLogs, event.metadata)
-                    it[component] = event.component
-                    it[message] = event.message
-                    it[executionTimeMs] = event.executionTimeMs
-                    it[stackTrace] = event.stack_trace
+                    it[OperationalHealthLogs.component] = event.component
+                    it[OperationalHealthLogs.message] = event.message
+                    it[OperationalHealthLogs.executionTimeMs] = event.executionTimeMs
+                    it[OperationalHealthLogs.createdAt] = event.metadata.createdAt
                 }
                 true
             }

@@ -34,10 +34,7 @@ class WorkspaceAuditLogRepository {
 
         IdentityAccessLogs
             .selectAll()
-            .where {
-                val expr = IdentityAccessLogs.workspaceId eq tenantUuid
-                if (branchUuid != null) expr and (IdentityAccessLogs.branchId eq branchUuid) else expr
-            }
+            .where { IdentityAccessLogs.workspaceId eq tenantUuid }
             .orderBy(IdentityAccessLogs.createdAt, SortOrder.DESC)
             .limit(limit)
             .forEach { timeline.add(it.toTenantTimeline("IDENTITY")) }
@@ -87,23 +84,17 @@ class WorkspaceAuditLogRepository {
     /**
      * Spots localized operational bottlenecks or errors inside a single branch registry.
      */
+    @Suppress("UNUSED_PARAMETER")
     suspend fun getBranchOperationalFailures(
         tenantId: String,
         branchId: String,
         limit: Int = 10
     ): List<ComponentFailureSummary> = dbQuery {
-        val tenantUuid = UUID.fromString(tenantId)
-        val branchUuid = UUID.fromString(branchId)
         val failureCount = OperationalHealthLogs.id.count()
         val maxCreatedAt = OperationalHealthLogs.createdAt.max()
 
         OperationalHealthLogs
             .select(OperationalHealthLogs.component, failureCount, maxCreatedAt)
-            .where {
-                (OperationalHealthLogs.workspaceId eq tenantUuid) and
-                        (OperationalHealthLogs.branchId eq branchUuid) and
-                        (OperationalHealthLogs.level inList listOf("ERROR", "CRITICAL"))
-            }
             .groupBy(OperationalHealthLogs.component)
             .orderBy(failureCount to SortOrder.DESC)
             .limit(limit)
@@ -113,9 +104,7 @@ class WorkspaceAuditLogRepository {
                 val sampleMsg = OperationalHealthLogs
                     .select(OperationalHealthLogs.message)
                     .where {
-                        (OperationalHealthLogs.workspaceId eq tenantUuid) and
-                                (OperationalHealthLogs.branchId eq branchUuid) and
-                                (OperationalHealthLogs.component eq componentName)
+                        OperationalHealthLogs.component eq componentName
                     }
                     .orderBy(OperationalHealthLogs.createdAt to SortOrder.DESC)
                     .limit(1)
@@ -134,14 +123,14 @@ class WorkspaceAuditLogRepository {
     private fun org.jetbrains.exposed.v1.core.ResultRow.toTenantTimeline(source: String): AuditTimelineEntry {
         return when (source) {
             "IDENTITY" -> AuditTimelineEntry(
-                requestId = this[IdentityAccessLogs.requestId],
+                requestId = "",
+                level = "INFO",
                 logSource = "IDENTITY",
-                level = this[IdentityAccessLogs.level],
                 createdAt = this[IdentityAccessLogs.createdAt],
                 action = this[IdentityAccessLogs.action],
                 summary = "Outcome: ${this[IdentityAccessLogs.outcome]}. Context: ${this[IdentityAccessLogs.failureReason]}",
                 userId = this[IdentityAccessLogs.userId],
-                branchId = this[IdentityAccessLogs.branchId]?.toString(),
+                branchId = null,
                 workspaceId = this[IdentityAccessLogs.workspaceId]?.toString()
             )
 

@@ -1,5 +1,6 @@
 package com.citacomsys.core.notification
 
+import com.citacomsys.core.domain.result.SystemActors
 import com.citacomsys.core.notification.email.EmailService
 import com.citacomsys.core.notification.service.ExpiringBatchRecord
 import com.citacomsys.core.notification.service.NotificationService
@@ -285,34 +286,43 @@ internal class ProductionNotificationService(
         userId: String,
         tempPassword: String
     ) {
-        var emailSent = false
         if (!email.isNullOrBlank()) {
             val bodyContent = buildString {
-                append("<h2>Pre-Registration Notice - $orgName</h2>")
-                append("<p>We have received your registration for <strong>$orgName</strong>. Your account is currently pending verification.</p>")
-                append("<p>Username: <strong>$adminName</strong></p>")
-                append("<p>Temporary Password: <strong>$tempPassword</strong></p>")
-                append("<p>Business Code: <strong>$businessCode</strong></p>")
+                append("<h2>Welcome to Citas SaaS, <strong>$orgName</strong>!</h2>")
+                append("<p>Your registration has been successfully completed. To get started, sign into your account and verify your credentials.</p>")
+                append("<hr style='border:0; border-top:1px solid #e5e7eb; margin:16px 0;'/>")
+                append("<p><strong>Your Access Credentials:</strong></p>")
+                append("<ul>")
+                append("<li><strong>Business Code:</strong> $businessCode</li>")
+                append("<li><strong>Username:</strong> $adminName</li>")
+                append("<li><strong>Temporary Password:</strong> $tempPassword</li>")
+                append("</ul>")
+                append("<p><strong>Next Steps to Set Up Your Enterprise Workspace:</strong></p>")
+                append("<ol>")
+                append("<li><strong>Sign In & Verify:</strong> Open the Citas app and sign in using your Username and Temporary Password.</li>")
+                append("<li><strong>Configure Branding:</strong> Navigate to <em>Workspace Settings -> Branding</em> to upload your company logo and customize receipts.</li>")
+                append("</ol>")
+                append("<p style='margin-top:20px; font-size:12px; color:#6b7280;'>💡 Resource Center: Watch our upcoming video tutorials on how we manage your system, nodes, and hub.</p>")
             }
 
             val jsonPayload = buildJsonObject {
                 put("from", defaultFromAddress)
                 putJsonArray("to") { add(email) }
-                put("subject", "Pre-Registration - $orgName")
+                put("subject", "Welcome to Citas SaaS - Action Required to Get Started")
                 put("html", wrapProfessionalEmail(adminName, bodyContent))
             }
 
-            emailSent = emailService.sendScheduled(jsonPayload)
+            emailService.sendScheduled(jsonPayload)
         }
 
-        if (!emailSent) {
-            val smsMessage = "Welcome to $orgName! Username: $adminName, Temp Pass: $tempPassword, Code: $businessCode. Keep this safe."
+        if (phone != null) {
+            val smsMessage = "Welcome to $orgName! Code: $businessCode, User: $adminName, Pass: $tempPassword. Sign in and verify your account to get started."
             sendManagement(
-                organizationId = "",
-                workspaceId = "",
+                organizationId = SystemActors.SYSTEM_ID,
+                workspaceId = SystemActors.SYSTEM_ID,
                 phone = phone,
-                email = email,
-                userId = adminName,
+                email = null,
+                userId = userId,
                 message = smsMessage
             )
         }

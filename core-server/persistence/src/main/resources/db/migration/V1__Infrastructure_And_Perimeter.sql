@@ -4,13 +4,8 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- Infrastructure & SIEM Logs
 CREATE TABLE IF NOT EXISTS identity_access_logs (
     id                      BIGSERIAL PRIMARY KEY,
-    request_id              VARCHAR(50) NOT NULL,
-    workspace_id            UUID,
     organization_id         UUID,
-    branch_id               UUID,
-    device_id               VARCHAR(255),
-    product_type            VARCHAR(50) NOT NULL,
-    level                   VARCHAR(20) NOT NULL DEFAULT 'INFO',
+    workspace_id            UUID,
     user_id                 VARCHAR(50),
     action                  VARCHAR(100) NOT NULL,
     outcome                 VARCHAR(50) NOT NULL,
@@ -54,13 +49,6 @@ CREATE TABLE IF NOT EXISTS application_audit_logs (
 
 CREATE TABLE IF NOT EXISTS network_security_logs (
     id                      BIGSERIAL PRIMARY KEY,
-    request_id              VARCHAR(50) NOT NULL,
-    workspace_id            UUID,
-    organization_id         UUID,
-    branch_id               UUID,
-    device_id               VARCHAR(255),
-    product_type            VARCHAR(50) NOT NULL,
-    level                   VARCHAR(20) NOT NULL DEFAULT 'INFO',
     client_ip               VARCHAR(64) NOT NULL,
     endpoint_route          VARCHAR(255) NOT NULL,
     trigger_event           VARCHAR(100) NOT NULL,
@@ -70,17 +58,9 @@ CREATE TABLE IF NOT EXISTS network_security_logs (
 
 CREATE TABLE IF NOT EXISTS operational_health_logs (
     id                      BIGSERIAL PRIMARY KEY,
-    request_id              VARCHAR(50) NOT NULL,
-    workspace_id            UUID,
-    organization_id         UUID,
-    branch_id               UUID,
-    device_id               VARCHAR(255),
-    product_type            VARCHAR(50) NOT NULL,
-    _level                   VARCHAR(20) NOT NULL DEFAULT 'INFO',
     component               VARCHAR(100) NOT NULL,
     message                 TEXT NOT NULL,
     execution_time_ms       BIGINT,
-    stack_trace             TEXT,
     created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -12,11 +12,9 @@ import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.count
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.max
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
-import java.util.UUID
 
 class SiemTraceRepository {
 
@@ -27,25 +25,21 @@ class SiemTraceRepository {
         NetworkSecurityLogs
             .select(
                 NetworkSecurityLogs.clientIp,
-                NetworkSecurityLogs.deviceId,
-                NetworkSecurityLogs.productType,
                 totalViolationsCount,
                 maxCreatedAt
             )
             .groupBy(
-                NetworkSecurityLogs.clientIp,
-                NetworkSecurityLogs.deviceId,
-                NetworkSecurityLogs.productType
+                NetworkSecurityLogs.clientIp
             )
             .orderBy(totalViolationsCount to SortOrder.DESC)
             .limit(limit)
             .map { row ->
                 SecurityThreatSummary(
                     clientIp = row[NetworkSecurityLogs.clientIp],
-                    deviceId = row[NetworkSecurityLogs.deviceId],
-                    appFlavor = row[NetworkSecurityLogs.productType],
+                    deviceId = null,
+                    appFlavor = "SYSTEM",
                     totalViolations = row[totalViolationsCount],
-                    lastTriggeredEvent = "AGGREGATED_THREAT_SIGNATURE",
+                    lastTriggeredEvent = "NETWORK_THREAT",
                     lastOccurredAt = row[maxCreatedAt]!!
                 )
             }
@@ -62,7 +56,6 @@ class SiemTraceRepository {
                     failureCount,
                     maxCreatedAt
                 )
-                .where { OperationalHealthLogs.level inList listOf("ERROR", "CRITICAL") }
                 .groupBy(OperationalHealthLogs.component)
                 .orderBy(failureCount to SortOrder.DESC)
                 .limit(limit)
@@ -105,15 +98,9 @@ class SiemTraceRepository {
     }
 
 
+    @Suppress("UNUSED_PARAMETER")
     suspend fun getTimelineByDeviceId(deviceId: String): List<TraceTimelineEntry> = dbQuery {
         val timeline = mutableListOf<TraceTimelineEntry>()
-
-        IdentityAccessLogs.selectAll().where { IdentityAccessLogs.deviceId eq deviceId }
-            .forEach { timeline.add(it.toTimelineEntry("IDENTITY")) }
-
-        NetworkSecurityLogs.selectAll().where { NetworkSecurityLogs.deviceId eq deviceId }
-            .forEach { timeline.add(it.toTimelineEntry("NETWORK")) }
-
         timeline.sortByDescending { it.createdAt }
         timeline
     }
@@ -121,17 +108,8 @@ class SiemTraceRepository {
     suspend fun getTimelineByRequestId(requestId: String): List<TraceTimelineEntry> = dbQuery {
         val timeline = mutableListOf<TraceTimelineEntry>()
 
-        IdentityAccessLogs.selectAll().where { IdentityAccessLogs.requestId eq requestId }
-            .forEach { timeline.add(it.toTimelineEntry("IDENTITY")) }
-
         ApplicationAuditLogs.selectAll().where { ApplicationAuditLogs.requestId eq requestId }
             .forEach { timeline.add(it.toTimelineEntry("APPLICATION")) }
-
-        NetworkSecurityLogs.selectAll().where { NetworkSecurityLogs.requestId eq requestId }
-            .forEach { timeline.add(it.toTimelineEntry("NETWORK")) }
-
-        OperationalHealthLogs.selectAll().where { OperationalHealthLogs.requestId eq requestId }
-            .forEach { timeline.add(it.toTimelineEntry("OPERATIONAL")) }
 
         timeline.sortBy { it.createdAt }
         timeline
@@ -140,26 +118,26 @@ class SiemTraceRepository {
     private fun ResultRow.toTimelineEntry(source: String): TraceTimelineEntry {
         return when (source) {
             "IDENTITY" -> TraceTimelineEntry(
-                requestId = this[IdentityAccessLogs.requestId],
+                requestId = "",
                 logSource = "IDENTITY",
-                level = this[IdentityAccessLogs.level],
+                level = "INFO",
                 createdAt = this[IdentityAccessLogs.createdAt],
                 actionOrComponent = this[IdentityAccessLogs.action],
                 description = "Outcome: ${this[IdentityAccessLogs.outcome]}",
                 organizationId = this[IdentityAccessLogs.organizationId]?.toString(),
                 workspaceId = this[IdentityAccessLogs.workspaceId]?.toString(),
-                deviceId = this[IdentityAccessLogs.deviceId]
+                deviceId = null
             )
             "NETWORK" -> TraceTimelineEntry(
-                requestId = this[NetworkSecurityLogs.requestId],
+                requestId = "",
                 logSource = "NETWORK",
-                level = this[NetworkSecurityLogs.level],
+                level = "INFO",
                 createdAt = this[NetworkSecurityLogs.createdAt],
                 actionOrComponent = this[NetworkSecurityLogs.triggerEvent],
-                description = this[NetworkSecurityLogs.endpointRoute],
-                organizationId = this[NetworkSecurityLogs.organizationId]?.toString(),
-                workspaceId = this[NetworkSecurityLogs.workspaceId]?.toString(),
-                deviceId = this[NetworkSecurityLogs.deviceId]
+                description = "IP: ${this[NetworkSecurityLogs.clientIp]} -> ${this[NetworkSecurityLogs.endpointRoute]}",
+                organizationId = null,
+                workspaceId = null,
+                deviceId = null
             )
             "APPLICATION" -> TraceTimelineEntry(
                 requestId = this[ApplicationAuditLogs.requestId],
@@ -173,15 +151,15 @@ class SiemTraceRepository {
                 deviceId = this[ApplicationAuditLogs.deviceId]
             )
             "OPERATIONAL" -> TraceTimelineEntry(
-                requestId = this[OperationalHealthLogs.requestId],
+                requestId = "",
                 logSource = "OPERATIONAL",
-                level = this[OperationalHealthLogs.level],
+                level = "INFO",
                 createdAt = this[OperationalHealthLogs.createdAt],
                 actionOrComponent = this[OperationalHealthLogs.component],
                 description = this[OperationalHealthLogs.message],
-                organizationId = this[OperationalHealthLogs.organizationId]?.toString(),
-                workspaceId = this[OperationalHealthLogs.workspaceId]?.toString(),
-                deviceId = this[OperationalHealthLogs.deviceId]
+                organizationId = null,
+                workspaceId = null,
+                deviceId = null
             )
             else -> throw IllegalArgumentException("Unknown source")
         }

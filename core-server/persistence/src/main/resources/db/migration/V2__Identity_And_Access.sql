@@ -57,8 +57,12 @@ CREATE TABLE IF NOT EXISTS user_workspace_bindings (
     id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id                 UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     workspace_id            UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    assigned_role           VARCHAR(50) NOT NULL,
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    branch_id               UUID,
+    role                    VARCHAR(50) NOT NULL DEFAULT 'TENANT_OWNER',
+    capabilities            TEXT NOT NULL DEFAULT '[]',
+    is_active               BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS otp_codes (

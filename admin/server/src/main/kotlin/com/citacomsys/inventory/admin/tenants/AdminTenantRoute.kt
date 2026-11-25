@@ -7,6 +7,7 @@ import com.citacomsys.core.persistence.plugin.writeTransaction
 import com.citacomsys.core.security.plugin.Authorize
 import com.citacomsys.types.PageQuery
 import com.citacomsys.types.UserCapability
+import io.ktor.http.HttpStatusCode
 import io.ktor.server.auth.authenticate
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -115,6 +116,42 @@ internal fun Route.adminTenantRoute(
                     }
                 }
             }
+        }
+    }
+}
+
+internal fun Route.publicTenantRoute(
+    tenantService: AdminTenantService
+) {
+    route("api/v1/public") {
+        // Unauthenticated Public Pre-Registration Endpoint
+        post("pre-register") {
+            val request = call.receive<AdminPreRegisterRequest>()
+            val result = call.writeTransaction {
+                tenantService.preRegisterOrganization(request)
+            }
+            call.respond(result)
+        }
+
+        // Unauthenticated Public Tenant & Server Resolution Endpoint
+        get("resolve-tenant") {
+            val query = call.request.queryParameters["identifier"]
+                ?: call.request.queryParameters["phone"]
+                ?: call.request.queryParameters["email"]
+                ?: call.request.queryParameters["businessCode"]
+
+            if (query.isNullOrBlank()) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    mapOf("error" to "Missing identifier parameter (email, phone, or businessCode)")
+                )
+                return@get
+            }
+
+            val result = call.readTransaction {
+                tenantService.resolveTenantEnvironment(query)
+            }
+            call.respond(result)
         }
     }
 }

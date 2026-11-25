@@ -60,6 +60,16 @@ data class AdminPreRegisterRequest(
     val username: String
 )
 
+@Serializable
+data class PublicTenantResolveResult(
+    val found: Boolean,
+    val organizationName: String? = null,
+    val businessCode: String? = null,
+    val status: String? = null,
+    val serverEnvironment: String = "staging",
+    val recommendedServerUrl: String = "https://api.citacomsys.com/staging/"
+)
+
 interface TenantApiService {
     suspend fun fetchOrganizations(query: PageQuery): PageResult<Organization>
     suspend fun getOrganizationDetails(orgId: String): OrganizationDetails

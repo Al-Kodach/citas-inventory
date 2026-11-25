@@ -20,6 +20,7 @@ import com.citacomsys.inventory.admin.system.AdminSystemService
 import com.citacomsys.inventory.admin.system.adminSystemRoute
 import com.citacomsys.inventory.admin.tenants.AdminTenantService
 import com.citacomsys.inventory.admin.tenants.adminTenantRoute
+import com.citacomsys.inventory.admin.tenants.publicTenantRoute
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
 import io.ktor.server.routing.route
@@ -68,6 +69,7 @@ fun Application.configureAdminApp() {
 
     routing {
         adminAuthRoute()
+        publicTenantRoute(inject<AdminTenantService>().value)
 
         route("api/v1/admin") {
             authenticate("admin-access-auth") {

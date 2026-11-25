@@ -30,7 +30,6 @@ import com.citacomsys.feature.api.telemetry.TelemetryAuditor
 import com.citacomsys.feature.api.telemetry.TelemetryLevel
 import com.citacomsys.shared.event.SseMessage
 import com.citacomsys.shared.security.PasswordHasher
-import com.citacomsys.admin.api.tenant.PublicTenantResolveResult
 import com.citacomsys.core.persistence.table.tenant.WorkspaceResourceUsageTable
 import com.citacomsys.core.persistence.table.tenant.WorkspaceResources
 import com.citacomsys.core.persistence.table.user.UserWorkspaceBindings
@@ -262,48 +261,6 @@ class AdminTenantService(
                 ownerPhoneMasked = request.ownerPhone.mask
             )
         }
-
-    /**
-     * Public Tenant & Server Resolution method to determine tenant/server environment.
-     */
-    suspend fun resolveTenantEnvironment(query: String): PublicTenantResolveResult = dbQuery {
-        val sanitized = query.trim()
-        val userRow = Users.selectAll().where {
-            (Users.phone eq sanitized) or
-                    (Users.email eq sanitized) or
-                    (Users.username eq sanitized)
-        }.singleOrNull()
-
-        val orgRow = if (userRow != null) {
-            val orgId = userRow[Users.organizationId]
-            Organizations.selectAll().where { Organizations.id eq orgId }.singleOrNull()
-        } else {
-            Organizations.selectAll().where {
-                (Organizations.businessCode eq sanitized) or
-                        (Organizations.phone eq sanitized) or
-                        (Organizations.email eq sanitized)
-            }.singleOrNull()
-        }
-
-        if (orgRow == null) {
-            PublicTenantResolveResult(found = false)
-        } else {
-            val envName = System.getenv("ENV")?.lowercase() ?: "staging"
-            val serverUrl = if (envName == "production" || envName == "prod")
-                "https://api.citacomsys.com/"
-            else
-                "https://api.citacomsys.com/staging/"
-
-            PublicTenantResolveResult(
-                found = true,
-                organizationName = orgRow[Organizations.name],
-                businessCode = orgRow[Organizations.businessCode],
-                status = orgRow[Organizations.status],
-                serverEnvironment = envName,
-                recommendedServerUrl = serverUrl
-            )
-        }
-    }
 
     /**
      * Fetches complete organization summary details including total recurring amount and workspaces/branches summary.

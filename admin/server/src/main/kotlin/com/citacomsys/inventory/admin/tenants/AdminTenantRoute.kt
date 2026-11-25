@@ -132,26 +132,5 @@ internal fun Route.publicTenantRoute(
             }
             call.respond(result)
         }
-
-        // Unauthenticated Public Tenant & Server Resolution Endpoint
-        get("resolve-tenant") {
-            val query = call.request.queryParameters["identifier"]
-                ?: call.request.queryParameters["phone"]
-                ?: call.request.queryParameters["email"]
-                ?: call.request.queryParameters["businessCode"]
-
-            if (query.isNullOrBlank()) {
-                call.respond(
-                    HttpStatusCode.BadRequest,
-                    mapOf("error" to "Missing identifier parameter (email, phone, or businessCode)")
-                )
-                return@get
-            }
-
-            val result = call.readTransaction {
-                tenantService.resolveTenantEnvironment(query)
-            }
-            call.respond(result)
-        }
     }
 }

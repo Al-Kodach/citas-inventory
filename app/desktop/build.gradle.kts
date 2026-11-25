@@ -51,7 +51,7 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Deb)
-            packageName = "com.citacomsys.inventory.desktop"
+            packageName = "citas-inventory"
             packageVersion = appVersion
         }
     }
